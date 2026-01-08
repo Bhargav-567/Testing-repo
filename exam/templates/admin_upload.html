@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+
+{% block title %}Upload Questions - Exam System{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="bg-white rounded-lg shadow-lg p-8">
+        <h2 class="text-3xl font-bold mb-2 text-gray-800">📤 Upload Questions</h2>
+        <p class="text-gray-600 mb-6">Upload an Excel (.xlsx) or CSV file with your exam questions</p>
+        
+        <!-- Success Message -->
+        {% if success %}
+        <div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-6">
+            <p class="font-bold">✅ Success!</p>
+            <p>{{ success }}</p>
+        </div>
+        {% endif %}
+        
+        <!-- Error Message -->
+        {% if error %}
+        <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6">
+            <p class="font-bold">❌ Error</p>
+            <p>{{ error }}</p>
+        </div>
+        {% endif %}
+        
+        <!-- File Format Info -->
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <h3 class="font-bold text-blue-900 mb-2">📋 Excel File Format Required:</h3>
+            <table class="w-full text-sm text-gray-700">
+                <tr>
+                    <td class="font-semibold">id</td>
+                    <td>q1, q2, q3... (unique ID)</td>
+                </tr>
+                <tr>
+                    <td class="font-semibold">question</td>
+                    <td>The actual question text</td>
+                </tr>
+                <tr>
+                    <td class="font-semibold">type</td>
+                    <td>mcq or descriptive</td>
+                </tr>
+                <tr>
+                    <td class="font-semibold">option1-4</td>
+                    <td>(For MCQ only) Answer choices</td>
+                </tr>
+                <tr>
+                    <td class="font-semibold">correct answer</td>
+                    <td>(For descriptive) Reference answer</td>
+                </tr>
+                <tr>
+                    <td class="font-semibold">correct option</td>
+                    <td>(For MCQ) The correct choice text</td>
+                </tr>
+            </table>
+        </div>
+        
+        <!-- Upload Form -->
+        <form method="POST" enctype="multipart/form-data">
+            {% csrf_token %}
+            
+            <div class="mb-6">
+                <label class="block text-gray-700 font-semibold mb-2">Select File:</label>
+                <input type="file" name="file" accept=".xlsx,.xls,.csv" required
+                       class="w-full px-4 py-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <p class="text-sm text-gray-500 mt-2">Supported: .xlsx, .xls, .csv</p>
+            </div>
+            
+            <div class="mb-6">
+                <label class="block text-gray-700 font-semibold mb-2">Exam Duration (minutes):</label>
+                <input type="number" name="duration" value="60" min="1" required
+                       class="w-full px-4 py-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            
+            <div class="flex gap-4">
+                <button type="submit" 
+                        class="flex-1 bg-blue-600 text-white py-3 rounded font-semibold hover:bg-blue-700 transition">
+                    ✅ Upload Questions
+                </button>
+                <a href="{% url 'admin_dashboard' %}" 
+                   class="flex-1 bg-gray-400 text-white py-3 rounded font-semibold hover:bg-gray-500 transition text-center">
+                    ← Back
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

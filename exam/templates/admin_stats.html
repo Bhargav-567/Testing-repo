@@ -1,0 +1,91 @@
+{% extends 'base.html' %}
+
+{% block title %}Test Statistics - Exam System{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <h2 class="text-3xl font-bold mb-8 text-gray-800">📊 Test Statistics</h2>
+    
+    <!-- Code Selection -->
+    <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+        <label class="block text-gray-700 font-semibold mb-4">Select Exam Code:</label>
+        <select id="code_select" onchange="showStats()" 
+                class="w-full md:w-96 px-4 py-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="">-- Select an exam --</option>
+            {% for code in codes %}
+                <option value="{{ code.id }}">{{ code.to_dict.test_name }} ({{ code.id }})</option>
+            {% endfor %}
+        </select>
+    </div>
+    
+    <!-- Stats Display -->
+    <div id="stats_container"></div>
+    
+    <div class="mt-6">
+        <a href="{% url 'admin_dashboard' %}" 
+           class="bg-gray-400 text-white px-8 py-3 rounded font-semibold hover:bg-gray-500 transition">
+            ← Back to Dashboard
+        </a>
+    </div>
+</div>
+
+<script>
+var statsData = {{ stats | safe }};
+
+function showStats() {
+    var code = document.getElementById('code_select').value;
+    if (!code || !statsData[code]) {
+        document.getElementById('stats_container').innerHTML = '<p class="text-gray-500">No data available</p>';
+        return;
+    }
+    
+    var data = statsData[code];
+    var html = '';
+    
+    // Stats Cards
+    html += '<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">';
+    html += '<div class="bg-blue-100 rounded-lg p-6 text-center">';
+    html += '<div class="text-3xl font-bold text-blue-600">' + data.total_tests + '</div>';
+    html += '<div class="text-gray-600 text-sm mt-2">Total Tests Taken</div>';
+    html += '</div>';
+    
+    html += '<div class="bg-green-100 rounded-lg p-6 text-center">';
+    html += '<div class="text-3xl font-bold text-green-600">' + data.avg_score.toFixed(2) + '</div>';
+    html += '<div class="text-gray-600 text-sm mt-2">Average Score</div>';
+    html += '</div>';
+    
+    html += '<div class="bg-yellow-100 rounded-lg p-6 text-center">';
+    html += '<div class="text-3xl font-bold text-yellow-600">' + data.max_score + '</div>';
+    html += '<div class="text-gray-600 text-sm mt-2">Highest Score</div>';
+    html += '</div>';
+    
+    html += '<div class="bg-purple-100 rounded-lg p-6 text-center">';
+    html += '<div class="text-3xl font-bold text-purple-600">' + data.min_score + '</div>';
+    html += '<div class="text-gray-600 text-sm mt-2">Lowest Score</div>';
+    html += '</div>';
+    html += '</div>';
+    
+    // Results Table
+    html += '<div class="bg-white rounded-lg shadow-lg overflow-hidden mb-6">';
+    html += '<div class="bg-purple-600 text-white px-6 py-4">';
+    html += '<h3 class="text-xl font-bold">Individual Results</h3>';
+    html += '</div>';
+    html += '<div class="overflow-x-auto">';
+    html += '<table class="w-full">';
+    html += '<thead class="bg-gray-200"><tr><th class="px-6 py-3 text-left">Student Name</th><th class="px-6 py-3 text-left">Score</th><th class="px-6 py-3 text-left">Percentage</th><th class="px-6 py-3 text-left">Date & Time</th></tr></thead>';
+    html += '<tbody class="divide-y">';
+    
+    data.results.forEach(function(result) {
+        html += '<tr class="hover:bg-gray-50"><td class="px-6 py-4">' + result.student_name + '</td><td class="px-6 py-4">' + result.score + '</td><td class="px-6 py-4">' + result.percentage + '</td><td class="px-6 py-4 text-sm text-gray-600">' + result.timestamp + '</td></tr>';
+    });
+    
+    html += '</tbody></table>';
+    html += '</div></div>';
+    
+    // Download Button
+    html += '<a href="/admin/download/' + code + '/" class="bg-blue-600 text-white px-8 py-3 rounded font-semibold hover:bg-blue-700 transition inline-block">📥 Download Results as CSV</a>';
+    
+    document.getElementById('stats_container').innerHTML = html;
+}
+</script>
+{% endblock %}

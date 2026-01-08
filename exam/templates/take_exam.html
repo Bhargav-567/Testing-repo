@@ -1,0 +1,374 @@
+{% extends 'base.html' %}
+
+{% block title %}Take Exam - Exam System{% endblock %}
+
+{% block content %}
+<div class="w-full">
+    <!-- Timer Bar - Sticky at Top -->
+    <div class="sticky top-20 bg-gradient-to-r from-red-600 to-red-700 text-white px-4 md:px-6 py-4 rounded-lg mb-6 flex flex-col md:flex-row justify-between items-center gap-4 shadow-lg z-40">
+        <h2 class="text-xl md:text-2xl font-bold flex items-center gap-2">
+            <span>📝</span> Exam in Progress
+        </h2>
+        <div class="flex items-center gap-4">
+            <div class="text-3xl md:text-4xl font-bold font-mono bg-red-800 px-4 py-2 rounded-lg" id="timer">60:00</div>
+            <span class="text-sm md:text-base text-red-100">Time Left</span>
+        </div>
+    </div>
+    
+    <!-- Exam Info Card -->
+    <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-blue-600 rounded-lg p-4 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <p class="text-sm text-gray-600">Student Name</p>
+                <p class="font-bold text-lg text-gray-800">{{ request.session.student_name }}</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-600">Exam Code</p>
+                <p class="font-bold text-lg text-blue-600">{{ exam_code }}</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-600">Total Questions</p>
+                <p class="font-bold text-lg text-gray-800" id="total_questions">0</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Questions Per Page Selector (Mobile Responsive) -->
+    <div class="bg-white rounded-lg shadow-md p-4 mb-6">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div class="w-full md:w-auto">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Questions Per Page:</label>
+                <select id="questions_per_page" onchange="changeQuestionsPerPage()" 
+                        class="w-full md:w-40 px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="5">5 Questions</option>
+                    <option value="10" selected>10 Questions</option>
+                    <option value="15">15 Questions</option>
+                    <option value="20">20 Questions</option>
+                </select>
+            </div>
+            <div class="w-full md:w-auto">
+                <p class="text-sm font-semibold text-gray-700 mb-2">Current Page</p>
+                <p class="text-lg font-bold text-blue-600"><span id="current_page">1</span> / <span id="total_pages">1</span></p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Questions Container -->
+    <div id="questions_container" class="space-y-6 mb-8"></div>
+    
+    <!-- Navigation Controls - Responsive -->
+    <div class="bg-white rounded-lg shadow-md p-4 mb-6">
+        <div class="flex flex-col md:flex-row justify-between items-center gap-3">
+            <button onclick="prevPage()" class="w-full md:w-auto bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-semibold transition">
+                ⬅️ Previous
+            </button>
+            <span class="text-center font-bold text-gray-800 text-lg">
+                Page <span id="page_info_current">1</span> of <span id="page_info_total">1</span>
+            </span>
+            <button onclick="nextPage()" class="w-full md:w-auto bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-semibold transition">
+                Next ➡️
+            </button>
+        </div>
+    </div>
+    
+    <!-- Action Buttons - Responsive -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <button onclick="submitExam()" class="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white py-4 rounded-lg font-bold text-lg transition shadow-lg">
+            🏁 Finish Exam & Submit
+        </button>
+        <button onclick="confirmQuit()" class="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white py-4 rounded-lg font-bold text-lg transition shadow-lg">
+            ❌ Quit Exam
+        </button>
+        <a href="{% url 'logout' %}" class="w-full bg-gray-600 hover:bg-gray-700 text-white py-4 rounded-lg font-bold text-lg transition shadow-lg text-center">
+            🔙 Back to Login
+        </a>
+    </div>
+
+
+</div>
+
+<script>
+// Variables
+var currentPage = 1;
+var questionsPerPage = 10;
+var allQuestions = {{ questions | safe }};
+var answers = {};
+var examDuration = parseInt('{{ duration }}');
+var timeRemaining = examDuration * 60;
+var isSubmitting = false;
+var timerInterval = null;
+
+console.log('Questions loaded:', allQuestions.length);
+console.log('Exam duration:', examDuration, 'minutes');
+
+// Start timer
+function startTimer() {
+    timerInterval = setInterval(function() {
+        timeRemaining--;
+        var mins = Math.floor(timeRemaining / 60);
+        var secs = timeRemaining % 60;
+        var minsStr = mins.toString().padStart(2, '0');
+        var secsStr = secs.toString().padStart(2, '0');
+        document.getElementById('timer').textContent = minsStr + ':' + secsStr;
+        
+        // Warning at 5 minutes
+        if (timeRemaining === 300) {
+            alert('⚠️ 5 minutes remaining!');
+        }
+        
+        // Auto submit when time is up
+        if (timeRemaining <= 0) {
+            clearInterval(timerInterval);
+            alert('⏰ Time is up! Your exam will be submitted automatically.');
+            submitExam();
+        }
+    }, 1000);
+}
+
+// Change questions per page
+function changeQuestionsPerPage() {
+    questionsPerPage = parseInt(document.getElementById('questions_per_page').value);
+    currentPage = 1;
+    displayQuestions();
+}
+
+// Display questions for current page
+function displayQuestions() {
+    var start = (currentPage - 1) * questionsPerPage;
+    var end = Math.min(start + questionsPerPage, allQuestions.length);
+    var totalPages = Math.ceil(allQuestions.length / questionsPerPage);
+    
+    var html = '';
+    
+    // Display each question
+    for (var i = start; i < end; i++) {
+        var q = allQuestions[i];
+        var qNum = i + 1;
+        
+        html += '<div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500 fade-in">';
+        html += '<div class="flex items-start justify-between mb-4">';
+        html += '<h3 class="text-lg md:text-xl font-bold text-gray-800 flex-1">Q' + qNum + ': ' + q.question + '</h3>';
+        html += '<span class="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-semibold ml-2">' + (q.type === 'mcq' ? 'MCQ' : 'Descriptive') + '</span>';
+        html += '</div>';
+        
+        if (q.type === 'mcq') {
+            // MCQ Options
+            html += '<div class="space-y-3">';
+            for (var j = 0; j < q.options.length; j++) {
+                var opt = q.options[j];
+                var checked = answers[q.id] && answers[q.id].selectedOption === opt ? 'checked' : '';
+                var checkedClass = checked ? 'bg-blue-50 border-blue-500' : 'bg-gray-50 hover:bg-gray-100';
+                
+                html += '<label class="flex items-center p-4 border-2 border-gray-300 rounded-lg cursor-pointer transition ' + checkedClass + '">';
+                html += '<input type="radio" name="q_' + q.id + '" value="' + opt + '" ' + checked + ' class="mr-3 w-5 h-5">';
+                html += '<span class="text-gray-800 font-medium flex-1">' + opt + '</span>';
+                html += '</label>';
+            }
+            html += '</div>';
+        } else {
+            // Descriptive Answer
+            var answerText = answers[q.id] && answers[q.id].answer ? answers[q.id].answer : '';
+            html += '<textarea name="q_' + q.id + '" rows="5" placeholder="Type your detailed answer here..." class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-sans resize-vertical">' + answerText + '</textarea>';
+            html += '<p class="text-xs text-gray-500 mt-2">Hint: Write clear and concise answers for better evaluation</p>';
+        }
+        
+        html += '</div>';
+    }
+    
+    document.getElementById('questions_container').innerHTML = html;
+    document.getElementById('current_page').textContent = currentPage;
+    document.getElementById('total_pages').textContent = totalPages;
+    document.getElementById('page_info_current').textContent = currentPage;
+    document.getElementById('page_info_total').textContent = totalPages;
+    document.getElementById('total_questions').textContent = allQuestions.length;
+    
+    // Disable/enable navigation buttons
+    document.querySelector('button:nth-of-type(1)').disabled = currentPage === 1;
+    document.querySelector('button:nth-of-type(2)').disabled = currentPage === totalPages;
+    
+    // Reattach event listeners
+    for (var i = start; i < end; i++) {
+        (function(q) {
+            var inputs = document.querySelectorAll('[name="q_' + q.id + '"]');
+            inputs.forEach(function(input) {
+                input.addEventListener('change', function(e) {
+                    if (q.type === 'mcq') {
+                        answers[q.id] = { selectedOption: e.target.value };
+                    } else {
+                        answers[q.id] = { answer: e.target.value };
+                    }
+                    console.log('Answer saved for Q' + q.id);
+                });
+            });
+        })(allQuestions[i]);
+    }
+}
+
+// Navigate to next page
+function nextPage() {
+    var totalPages = Math.ceil(allQuestions.length / questionsPerPage);
+    if (currentPage < totalPages) {
+        currentPage++;
+        displayQuestions();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+}
+
+// Navigate to previous page
+function prevPage() {
+    if (currentPage > 1) {
+        currentPage--;
+        displayQuestions();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+}
+
+// Get CSRF token from cookie
+function getCookie(name) {
+    var cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        var cookies = document.cookie.split(';');
+        for (var i = 0; i < cookies.length; i++) {
+            var cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+// Submit exam
+function submitExam() {
+    if (isSubmitting) {
+        console.log("⚠️ Already submitting, please wait...");
+        return;
+    }
+    
+    isSubmitting = true;
+    
+    if (!confirm('Are you sure you want to submit? This cannot be undone.')) {
+        isSubmitting = false;
+        return;
+    }
+    
+    // Show loading state
+    var submitBtn = document.querySelectorAll('button')[0];
+    var originalText = submitBtn.textContent;
+    submitBtn.textContent = '⏳ Submitting...';
+    submitBtn.disabled = true;
+    
+    // Collect all answers
+    var answerData = {};
+    for (var i = 0; i < allQuestions.length; i++) {
+        var q = allQuestions[i];
+        answerData[q.id] = answers[q.id] || {};
+    }
+    
+    var csrftoken = getCookie('csrftoken');
+    
+    console.log('');
+    console.log('================================');
+    console.log('📤 SUBMITTING EXAM');
+    console.log('================================');
+    console.log('Total questions:', allQuestions.length);
+    console.log('Answers provided:', Object.keys(answerData).length);
+    console.log('CSRF Token:', csrftoken ? 'Present ✅' : 'Missing ❌');
+    console.log('================================');
+    console.log('');
+    
+    fetch('/api/submit-exam/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken
+        },
+        body: JSON.stringify({ answers: answerData })
+    })
+    .then(function(r) {
+        console.log('Response status:', r.status);
+        console.log('Response headers:', r.headers);
+        
+        if (!r.ok) {
+            return r.text().then(function(text) {
+                throw new Error('HTTP ' + r.status + ': ' + text);
+            });
+        }
+        return r.json();
+    })
+    .then(function(data) {
+        console.log('✅ SUCCESS! Response:', data);
+        
+        if (data.success || data.score !== undefined) {
+            console.log('📊 Score:', data.score, '/', data.total);
+            sessionStorage.setItem('exam_results', JSON.stringify(data));
+            console.log('⏳ Redirecting to results page...');
+            window.location.href = '/student/results/';
+        } else {
+            throw new Error('Invalid response format');
+        }
+    })
+    .catch(function(e) {
+        isSubmitting = false;
+        submitBtn.textContent = originalText;
+        submitBtn.disabled = false;
+        
+        console.error('❌ ERROR:', e);
+        console.error('Full error:', e.message);
+        
+        alert('❌ Error submitting exam:\n\n' + e.message + '\n\nPlease:\n1. Check browser console (F12)\n2. Check Django terminal\n3. Try again or contact support');
+    });
+}
+
+
+// Confirm quit
+function confirmQuit() {
+    if (confirm('Are you sure? Your progress will be lost.')) {
+        clearInterval(timerInterval);
+        window.location.href = '/logout/';
+    }
+}
+
+// Initialize
+console.log('🚀 Initializing exam page...');
+startTimer();
+displayQuestions();
+</script>
+
+<style>
+.fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Disable button styling */
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 640px) {
+    .sticky {
+        position: relative;
+        top: 0;
+    }
+    
+    button {
+        padding: 0.75rem 1rem;
+        font-size: 0.875rem;
+    }
+}
+</style>
+{% endblock %}

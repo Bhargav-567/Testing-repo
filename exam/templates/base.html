@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Exam System{% endblock %}</title>
+    
+    <!-- Tailwind CSS CDN (Full Version for Best Visuals) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Custom Configuration for Tailwind -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#2563eb',
+                        secondary: '#6b7280',
+                        success: '#16a34a',
+                        danger: '#dc2626',
+                        warning: '#f59e0b',
+                        info: '#3b82f6',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                    },
+                },
+            },
+        }
+    </script>
+    
+    <style>
+        /* Custom animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        
+        .slide-in {
+            animation: slideIn 0.3s ease-in-out;
+        }
+        
+        /* Smooth transitions */
+        * {
+            transition: all 0.2s ease-in-out;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+    <!-- Navigation -->
+    <nav class="bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex justify-between items-center">
+                <!-- Logo -->
+                <div class="flex items-center gap-3">
+                    <span class="text-3xl">🎓</span>
+                    <h1 class="text-2xl font-bold">Exam Sys</h1>
+                    <h1 class="text-2xl font-bold">AI Exam System</h1>
+                </div>
+                
+                <!-- User Info -->
+                <div class="flex items-center gap-6">
+                    {% if request.session.student_logged_in %}
+                        <!-- Student Display -->
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center text-xl">👤</div>
+                            <div>
+                                <div class="text-xs text-blue-100 uppercase tracking-wide">Student</div>
+                                <div class="font-semibold text-lg">{{ request.session.student_name }}</div>
+                                <div class="font-semibold text-lg">{{ request.session.pern_no }}</div>
+                            </div>
+                        </div>
+                        <a href="{% url 'logout' %}" class="bg-white text-blue-600 px-4 py-2 rounded-lg font-semibold hover:bg-blue-50 transition shadow-md">
+                            Logout
+                        </a>
+                    
+                    {% elif request.session.admin_logged_in %}
+                        <!-- Admin Display -->
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 bg-yellow-400 rounded-full flex items-center justify-center text-xl">🔑</div>
+                            <div>
+                                <div class="text-xs text-blue-100 uppercase tracking-wide">Admin</div>
+                                <div class="font-semibold text-lg">{{ request.session.admin_user|default:"Admin" }}</div>
+                            </div>
+                        </div>
+                        <a href="{% url 'logout' %}" class="bg-white text-blue-600 px-4 py-2 rounded-lg font-semibold hover:bg-blue-50 transition shadow-md">
+                            Logout
+                        </a>
+                    
+                    {% else %}
+                        <!-- No Login -->
+                        <span class="text-blue-100">Not logged in</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 py-8 min-h-screen">
+        {% block content %}{% endblock %}
+    </main>
+    
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-gray-300 py-8 mt-12">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            <p>&copy; 2025 AI Exam Evaluation System. All rights reserved.</p>
+            <p class="text-sm text-gray-500 mt-2">Powered by Django + Firebase Firestore</p>
+        </div>
+    </footer>
+</body>
+</html>
