@@ -24,36 +24,118 @@
         </div>
         {% endif %}
         
-        <!-- File Format Info -->
-        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-            <h3 class="font-bold text-blue-900 mb-2">📋 Excel File Format Required:</h3>
-            <table class="w-full text-sm text-gray-700">
-                <tr>
-                    <td class="font-semibold">id</td>
-                    <td>q1, q2, q3... (unique ID)</td>
-                </tr>
-                <tr>
-                    <td class="font-semibold">question</td>
-                    <td>The actual question text</td>
-                </tr>
-                <tr>
-                    <td class="font-semibold">type</td>
-                    <td>mcq or descriptive</td>
-                </tr>
-                <tr>
-                    <td class="font-semibold">option1-4</td>
-                    <td>(For MCQ only) Answer choices</td>
-                </tr>
-                <tr>
-                    <td class="font-semibold">correct answer</td>
-                    <td>(For descriptive) Reference answer</td>
-                </tr>
-                <tr>
-                    <td class="font-semibold">correct option</td>
-                    <td>(For MCQ) The correct choice text</td>
-                </tr>
-            </table>
+        <!-- Excel Format Example (UPDATED) -->
+        <!-- COMPLETE BLUE EXCEL TABLE -->
+        <div class="bg-gradient-to-b from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-2xl p-8 mb-12 shadow-lg">
+            <h3 class="text-2xl font-bold text-blue-800 mb-8 flex items-center">
+                📋 Excel Format - All Columns
+                <span class="ml-3 px-4 py-2 bg-blue-500 text-white text-sm font-semibold rounded-full">Copy-Paste Ready</span>
+            </h3>
+            
+            <div class="overflow-x-auto bg-white rounded-xl shadow-md border border-blue-200">
+                <table class="w-full text-sm">
+                    <thead class="bg-blue-500 text-white">
+                        <tr>
+                            <th class="px-4 py-3 text-left font-bold rounded-tl-lg">col_names</th>
+                            <th class="px-4 py-3 text-left font-bold rounded-tr-lg">value</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-blue-100">
+                        <!-- DESCRIPTIVE QUESTION Q1 -->
+                        <tr class="hover:bg-blue-25 transition-colors">
+                            <td class="px-4 py-3 font-mono bg-blue-50 text-blue-900 font-medium">Q_ID</td>
+                            <td class="px-4 py-3 font-bold">Q1</td>
+                        </tr>
+                        <tr class="hover:bg-blue-25 transition-colors">
+                            <td class="px-4 py-3 font-mono bg-blue-50 text-blue-900 font-medium">Question</td>
+                            <td class="px-4 py-3">What is photosynthesis?</td>
+                        </tr>
+                        <tr class="hover:bg-blue-25 transition-colors">
+                            <td class="px-4 py-3 font-mono bg-blue-50 text-blue-900 font-medium">Type</td>
+                            <td class="px-4 py-3"><span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-bold">descriptive</span></td>
+                        </tr>
+                        <tr class="hover:bg-blue-25 transition-colors">
+                            <td class="px-4 py-3 font-mono bg-blue-50 text-blue-900 font-medium">Teacher_Answer</td>
+                            <td class="px-4 py-3">Plants use sunlight to make food</td>
+                        </tr>
+                        <tr class="hover:bg-blue-25 transition-colors">
+                            <td class="px-4 py-3 font-mono bg-blue-50 text-blue-900 font-medium">Max_Score</td>
+                            <td class="px-4 py-3 text-2xl font-bold text-green-700">10.0</td>
+                        </tr>
+                        <!-- CONCEPTS & KEYWORDS (DESCRIPTIVE) -->
+                        <tr class="hover:bg-blue-25 transition-colors bg-green-50">
+                            <td class="px-4 py-3 font-mono bg-emerald-50 text-emerald-900 font-medium">col_names</td>
+                            <td class="px-4 py-3 text-green-800 font-semibold">plants,chlorophyll</td>
+                        </tr>
+                        <tr class="hover:bg-blue-25 transition-colors bg-green-50">
+                            <td class="px-4 py-3 font-mono bg-emerald-50 text-emerald-900 font-medium">keywords</td>
+                            <td class="px-4 py-3 text-green-800 font-semibold">plant,plants,sunlight,energy,food</td>
+                        </tr>
+
+                        <tr class="bg-gradient-to-r from-gray-100 to-blue-100 py-2">
+                            <td class="px-4 py-4 font-bold text-gray-800 border-t-2 border-blue-200" colspan="2">
+                                ➕ **Q2: MCQ EXAMPLE**
+                            </td>
+                        </tr>
+
+                        <!-- MCQ QUESTION Q2 -->
+                        <tr class="hover:bg-blue-25 transition-colors">
+                            <td class="px-4 py-3 font-mono bg-blue-50 text-blue-900 font-medium">Q_ID</td>
+                            <td class="px-4 py-3 font-bold">Q2</td>
+                        </tr>
+                        <tr class="hover:bg-blue-25 transition-colors">
+                            <td class="px-4 py-3 font-mono bg-blue-50 text-blue-900 font-medium">Question</td>
+                            <td class="px-4 py-3">Capital of France?</td>
+                        </tr>
+                        <tr class="hover:bg-blue-25 transition-colors">
+                            <td class="px-4 py-3 font-mono bg-blue-50 text-blue-900 font-medium">Type</td>
+                            <td class="px-4 py-3"><span class="px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-xs font-bold">mcq</span></td>
+                        </tr>
+                        <tr class="hover:bg-blue-25 transition-colors">
+                            <td class="px-4 py-3 font-mono bg-blue-50 text-blue-900 font-medium">Teacher_Answer</td>
+                            <td class="px-4 py-3 font-bold text-green-700">A</td>
+                        </tr>
+                        <tr class="hover:bg-blue-25 transition-colors">
+                            <td class="px-4 py-3 font-mono bg-blue-50 text-blue-900 font-medium">Max_Score</td>
+                            <td class="px-4 py-3 text-2xl font-bold text-green-700">1.0</td>
+                        </tr>
+                        <!-- MCQ OPTIONS (PIPE SEPARATED) -->
+                        <tr class="hover:bg-blue-25 transition-colors bg-orange-50">
+                            <td class="px-4 py-3 font-mono bg-orange-50 text-orange-900 font-medium">options</td>
+                            <td class="px-4 py-3 text-orange-800 font-semibold">A.Paris|B.London|C.Berlin|D.Madrid</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- SEPARATOR RULES -->
+            <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl shadow-lg">
+                <div>
+                    <h4 class="font-bold text-xl mb-4 flex items-center">
+                        <span class="w-2 h-2 bg-white rounded-full mr-3"></span>Separators
+                    </h4>
+                    <div class="space-y-3 text-blue-100">
+                        <div><span class="font-mono bg-white/20 px-2 py-1 rounded text-xs">, (comma)</span> → concepts, keywords</div>
+                        <div><span class="font-mono bg-white/20 px-2 py-1 rounded text-xs">|</span> → MCQ options (pipe)</div>
+                        <div><span class="font-mono bg-white/20 px-2 py-1 rounded text-xs">A,B,C</span> → Teacher_Answer (letter)</div>
+                    </div>
+                </div>
+                <div>
+                    <h4 class="font-bold text-xl mb-4 flex items-center">
+                        <span class="w-2 h-2 bg-white rounded-full mr-3"></span>Quick Rules
+                    </h4>
+                    <ul class="space-y-2 text-sm">
+                        <li>• <strong>Required:</strong> Q_ID, Question, Type, Teacher_Answer, Max_Score</li>
+                        <li>• <strong>Descriptive:</strong> col_names (concepts), keywords</li>
+                        <li>• <strong>MCQ:</strong> options (A|B|C|D), Teacher_Answer (A,B,C...)</li>
+                    </ul>
+                </div>
+            </div>
         </div>
+
+
+
+
         
         <!-- Upload Form -->
         <form method="POST" enctype="multipart/form-data">

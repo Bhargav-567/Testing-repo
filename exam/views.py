@@ -1,35 +1,35 @@
 from django.shortcuts import render, redirect
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.contrib import messages
 from django.contrib.auth.hashers import make_password, check_password
-
-
-from .firebase_config import db
-from .firebase_config import get_firestore_client
-
-from .ai_service import evaluate_answer
+from django.contrib import messages
 import json
 import pandas as pd
+import uuid
 from datetime import datetime
 from google.cloud.firestore_v1 import SERVER_TIMESTAMP
 
-# Admin credentials
+# NEW IMPORTS for Hybrid Grader
+# from .ai_service import evaluate_answer  # Updated to hybrid
+from .grader import DescriptiveAnswerGrader, Concept, QuestionConfig  # NEW
+
+from .firebase_config import db
+
+# Admin credentials (UNCHANGED)
 ADMIN_USER = 'Admin'
 ADMIN_PASS = 'key123'
 ADMIN_REGISTER_CODE = 'Boss@2025'
-ADMIN_DOC_ID = "8BxExHElJPAbZmMr4oeF"  # Firestore document ID for admin credentials
+ADMIN_DOC_ID = "8BxExHElJPAbZmMr4oeF"
 
-# ==================== DATABASE HELPER ====================
-
+# ==================== DATABASE HELPER (UNCHANGED) ====================
 def get_admin_doc():
     doc_ref = db.collection('admin_users').document(ADMIN_DOC_ID)
     doc = doc_ref.get()
     return doc_ref, doc
 
+# ==================== AUTH VIEWS (UNCHANGED) ====================
 def login(request):
     error = None
-
     if request.method == 'POST':
         if 'reset_password' in request.POST:
             register_code = request.POST.get('register_code', '')
@@ -45,37 +45,29 @@ def login(request):
                 error = "Admin credentials not found in database."
                 return render(request, 'login.html', {'error': error})
             
-            # Hash the new password before storing
             password_hash = make_password(new_password)
-            
-            # Update Firestore admin doc with new password and optional contact info
             update_data = {
                 'password_hash': password_hash,
                 'email_or_mobile': contact_info,
                 'updated_at': datetime.utcnow()
             }
             doc_ref.update(update_data)
-            
-            # Optionally add a success message here
-            return redirect('login')  # Redirect after password reset
+            return redirect('login')
         
-        # Login processing: check Firestore admin credentials
         login_type = request.POST.get('login_type')
-        
         if login_type == 'admin':
             username = request.POST.get('username')
             password = request.POST.get('password')
             
             doc_ref, doc = get_admin_doc()
             if not doc.exists:
-                error = "Admin credentials not set. Contact system administrator."
+                error = "Admin credentials not set."
                 return render(request, 'login.html', {'error': error})
             
             admin_data = doc.to_dict()
             stored_username = admin_data.get('username')
             stored_password_hash = admin_data.get('password_hash')
             
-            # Check username and verify hashed password
             if (username == stored_username and 
                 check_password(password, stored_password_hash)):
                 request.session['admin_logged_in'] = True
@@ -85,16 +77,14 @@ def login(request):
         
         elif login_type == 'student':
             name = request.POST.get('student_name')
-            pern_no = request.POST.get('pern_no')  # NEW LINE
+            pern_no = request.POST.get('pern_no')
             if name and pern_no:
                 request.session['student_name'] = name
                 request.session['student_logged_in'] = True
-                request.session['pern_no'] = pern_no  # NEW LINE
+                request.session['pern_no'] = pern_no
                 return redirect('enter_exam_code')
             else:
                 error = 'Enter your name and PERN no'
-            # Your existing student login logic here
-            pass
 
     return render(request, 'login.html', {'error': error})
 
@@ -102,99 +92,110 @@ def logout(request):
     request.session.flush()
     return redirect('login')
 
-# ==================== ADMIN VIEWS ====================
-
+# ==================== ADMIN VIEWS (UPDATED) ====================
 def admin_dashboard(request):
     if not request.session.get('admin_logged_in'):
         return redirect('login')
     return render(request, 'admin_dashboard.html')
 
+# NEW: Enhanced admin_upload with CONCEPT columns
+@csrf_exempt
 def admin_upload(request):
     if not request.session.get('admin_logged_in'):
         return redirect('login')
     
     if request.method == 'POST':
         if 'file' not in request.FILES:
-            return render(request, 'admin_upload.html', {'error': 'No file selected'})
+            return JsonResponse({'error': 'No file selected'}, status=400)
         
         file = request.FILES['file']
-        duration = int(request.POST.get('duration', 60))
-        
         try:
-            # Read Excel/CSV file
-            if file.name.endswith('.csv'):
-                df = pd.read_csv(file)
-            else:
-                df = pd.read_excel(file)
+            df = pd.read_excel(file) if file.name.endswith(('.xlsx', '.xls')) else pd.read_csv(file)
             
-            # Clear existing questions in Firestore
-            questions_ref = db.collection('questions')
-            for doc in questions_ref.stream():
+            # Clear existing questions
+            for doc in db.collection('questions').stream():
                 doc.reference.delete()
             
-            # Add new questions
+            questions_data = []
             for idx, row in df.iterrows():
+                q_id = str(row.get('Q_ID', f'Q{idx+1}'))
+                q_type = str(row.get('Type', row.get('type', 'mcq'))).lower().strip()
+                
+                # NEW: Parse CONCEPT columns
+                concepts = []
+                if 'Concept_Names' in df.columns and 'Concept_Keywords' in df.columns:
+                    names_str = str(row.get('Concept_Names', '')).strip()
+                    kws_str = str(row.get('Concept_Keywords', '')).strip()
+                    if names_str and kws_str:
+                        names = [n.strip() for n in names_str.split(',')]
+                        kw_lists = [kws.strip().split(',') for kws in kws_str.split(';')]
+                        for name, kws in zip(names, kw_lists):
+                            if name:
+                                concepts.append({
+                                    'name': name,
+                                    'keywords': [kw.strip() for kw in kws if kw.strip()]
+                                })
+                
                 options = [str(row.get(f'option{i}', '')) for i in range(1, 5)]
-                options = [opt for opt in options if opt and opt != 'nan']
+                options = [opt for opt in options if opt.strip() and opt != 'nan']
                 
-                question_data = {
-                    'id': str(row.get('id', f'q{idx+1}')),
-                    'question': str(row['question']),
-                    'type': str(row['type']).lower().strip(),
-                    'options': options,
-                    'correct_answer': str(row.get('correct answer', '')),
-                    'correct_option': str(row.get('correct option', '')),
-                    'created_at': SERVER_TIMESTAMP
+                q_data = {
+                    'id': str(row.get('Q_ID', f'q{idx+1}')),
+                    'question': str(row['Question']),
+                    'type': str(row['Type']).lower().strip(),
+                    'teacher_answer': str(row.get('Teacher_Answer', '')),
+                    'max_score': float(row.get('Max_Score', 10.0 if row['Type'].lower() == 'descriptive' else 1.0)),  # ✅ NEW
+                    'concepts': row.get('Concept_Names', '').split(',') if row.get('Concept_Names') else [],
+                    'options': row.get('Options', '').split('|') if row.get('Options') else []
                 }
-                
-                db.collection('questions').document(question_data['id']).set(question_data)
+                db.collection('questions').document(q_id).set(q_data)
+                questions_data.append(q_data)
             
-            return render(request, 'admin_upload.html', {
-                'success': f'Uploaded {len(df)} questions successfully!'
+            # Save config summary
+            db.collection('questions').document('config').set({
+                'questions': questions_data,
+                'total_questions': len(questions_data),
+                'updated_at': SERVER_TIMESTAMP
             })
-        
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'✅ Uploaded {len(questions_data)} questions with concepts!',
+                'concepts_count': sum(1 for q in questions_data if q['concepts'])
+            })
         except Exception as e:
-            return render(request, 'admin_upload.html', {'error': f'Error: {str(e)}'})
+            return JsonResponse({'error': str(e)}, status=400)
     
     return render(request, 'admin_upload.html')
 
 def admin_codes(request):
+    # UNCHANGED
     if not request.session.get('admin_logged_in'):
         return redirect('login')
     
     if request.method == 'POST':
         action = request.POST.get('action')
-        
         if action == 'add':
             code = request.POST.get('code')
             test_name = request.POST.get('test_name', 'New Test')
             duration = int(request.POST.get('duration', 60))
             
-            # Check if code exists
             if db.collection('exam_codes').document(code).get().exists:
                 codes = list(db.collection('exam_codes').stream())
                 return render(request, 'admin_codes.html', {
-                    'error': 'Code already exists',
-                    'codes': codes
+                    'error': 'Code already exists', 'codes': codes
                 })
             
-            # Add new code
             db.collection('exam_codes').document(code).set({
-                'code': code,
-                'test_name': test_name,
-                'duration': duration,
-                'active': False,
-                'created_at': SERVER_TIMESTAMP
+                'code': code, 'test_name': test_name, 'duration': duration,
+                'active': False, 'created_at': SERVER_TIMESTAMP
             })
-            
         elif action == 'activate':
             code = request.POST.get('code')
             db.collection('exam_codes').document(code).update({'active': True})
-        
         elif action == 'deactivate':
             code = request.POST.get('code')
             db.collection('exam_codes').document(code).update({'active': False})
-        
         elif action == 'update_name':
             code = request.POST.get('code')
             test_name = request.POST.get('test_name')
@@ -203,45 +204,84 @@ def admin_codes(request):
     codes = list(db.collection('exam_codes').stream())
     return render(request, 'admin_codes.html', {'codes': codes})
 
+# NEW: Enhanced admin_stats with PERN/Name SEARCH
+def clean_firestore_data(data):
+    """Convert Firestore timestamps to JSON-safe strings"""
+    if isinstance(data, dict):
+        return {k: clean_firestore_data(v) for k, v in data.items()}
+    elif hasattr(data, 'isoformat'):  # Timestamp
+        return data.isoformat()
+    elif data is None:
+        return None
+    else:
+        return str(data)
+
 def admin_stats(request):
     if not request.session.get('admin_logged_in'):
         return redirect('login')
     
     codes = list(db.collection('exam_codes').stream())
-    
     stats_data = {}
+    
     for code_doc in codes:
-        code = code_doc.id
-        results = list(db.collection('results').where('exam_code', '==', code).stream())
+        code_id = code_doc.id
+        results = list(db.collection('results').where('exam_code', '==', code_id).stream())
         
         if results:
-            scores = [r.to_dict()['score'] for r in results]
-            total = results[0].to_dict()['total']
-            stats_data[code] = {
+            clean_results = []
+            scores, totals = [], []
+            
+            for r in results:
+                r_dict = r.to_dict()
+                # 🔥 FIX: Clean ALL Firestore data
+                r_clean = clean_firestore_data(r_dict)
+                
+                clean_results.append({
+                    'doc_id': r.id,
+                    'student_name': r_clean['student_name'],
+                    'pern_no': r_clean.get('pern_no', 'N/A'),
+                    'score': f"{r_clean['score']}/{r_clean['total']}",
+                    'percentage': f"{(r_clean['score'] / r_clean['total']) * 100:.1f}%",
+                    'timestamp': r_clean.get('timestamp', 'N/A')
+                })
+                
+                scores.append(float(r_clean['score']))
+                totals.append(float(r_clean['total']))
+            
+            stats_data[code_id] = {
                 'test_name': code_doc.to_dict().get('test_name', 'Unnamed'),
                 'total_tests': len(results),
                 'avg_score': sum(scores) / len(scores),
                 'max_score': max(scores),
                 'min_score': min(scores),
-                'total_questions': total,
-                'results': [{
-                    'student_name': r.to_dict()['student_name'],
-                    'score': f"{r.to_dict()['score']}/{r.to_dict()['total']}",
-                    'percentage': f"{(r.to_dict()['score'] / r.to_dict()['total']) * 100:.2f}%",
-                    'timestamp': r.to_dict()['timestamp']
-                } for r in results]
+                'total_questions': totals[0],
+                'results': clean_results
+            }
+        else:
+            stats_data[code_id] = {
+                'test_name': code_doc.to_dict().get('test_name', 'Unnamed'),
+                'total_tests': 0,
+                'avg_score': 0,
+                'max_score': 0,
+                'min_score': 0,
+                'total_questions': 0,
+                'results': []
             }
     
-    return render(request, 'admin_stats.html', {'codes': codes, 'stats': stats_data})
+    return render(request, 'admin_stats.html', {
+        'codes': codes,
+        'stats': stats_data
+    })
 
 def download_results(request, code):
+    # UNCHANGED
     if not request.session.get('admin_logged_in'):
         return redirect('login')
     
     results = list(db.collection('results').where('exam_code', '==', code).stream())
-    
     data = [{
         'Student Name': r.to_dict()['student_name'],
+        'PERN No': r.to_dict().get('pern_no', 'N/A'),
         'Score': f"{r.to_dict()['score']}/{r.to_dict()['total']}",
         'Percentage': f"{(r.to_dict()['score'] / r.to_dict()['total']) * 100:.2f}%",
         'Timestamp': r.to_dict()['timestamp']
@@ -251,12 +291,28 @@ def download_results(request, code):
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = f'attachment; filename="{code}_results.csv"'
     df.to_csv(path_or_buf=response, index=False)
-    
     return response
 
-# ==================== STUDENT VIEWS ====================
+# NEW: API for detailed result modal
+@csrf_exempt
+def student_result_detail(request, doc_id):
+    doc = db.collection('results').document(doc_id).get()
+    if doc.exists:
+        data = doc.to_dict()
+        # Enhance details with teacher answers
+        for detail in data.get('details', []):
+            q_doc = db.collection('questions').document(detail.get('q_id', '')).get()
+            if q_doc.exists:
+                q_data = q_doc.to_dict()
+                detail['details'] = detail.get('details', {})
+                detail['details']['teacher_answer'] = q_data.get('teacher_answer', '')
+                detail['details']['student_answer'] = detail.get('your_answer', '')
+        return JsonResponse(data)
+    return JsonResponse({'error': 'Not found'}, status=404)
 
+# ==================== STUDENT VIEWS (UPDATED submit_exam) ====================
 def enter_exam_code(request):
+    # UNCHANGED
     if not request.session.get('student_logged_in'):
         return redirect('login')
     
@@ -271,7 +327,6 @@ def enter_exam_code(request):
         if not code_data.get('active', False):
             return render(request, 'enter_exam_code.html', {'error': 'Exam not active'})
         
-        # Check if questions exist
         questions = list(db.collection('questions').stream())
         if not questions:
             return render(request, 'enter_exam_code.html', {'error': 'No questions loaded'})
@@ -284,185 +339,117 @@ def enter_exam_code(request):
     return render(request, 'enter_exam_code.html')
 
 def take_exam(request):
+    # UNCHANGED
     if not request.session.get('student_logged_in') or 'exam_code' not in request.session:
         return redirect('enter_exam_code')
     
     questions = list(db.collection('questions').stream())
     questions_data = [{
-        'id': q.id,
-        'question': q.to_dict()['question'],
-        'type': q.to_dict()['type'],
-        'options': q.to_dict().get('options', [])
+        'id': q.id, 'question': q.to_dict()['question'],
+        'type': q.to_dict()['type'], 'options': q.to_dict().get('options', [])
     } for q in questions]
     
-    context = {
+    return render(request, 'take_exam.html', {
         'questions': json.dumps(questions_data),
         'duration': request.session.get('exam_duration', 60),
         'student_name': request.session.get('student_name'),
         'exam_code': request.session.get('exam_code')
-    }
-    
-    return render(request, 'take_exam.html', context)
+    })
 
 @csrf_exempt
 def submit_exam(request):
-    """Submit exam answers and evaluate"""
-    print("\n" + "="*60)
-    print("🔍 SUBMIT EXAM FUNCTION CALLED")
-    print("="*60)
+    print("\n🚀 NEW HYBRID EXAM EVALUATION")
     
     if request.method != 'POST':
-        print("❌ Invalid request method:", request.method)
-        return JsonResponse({'error': 'Invalid request method'}, status=400)
+        return JsonResponse({'error': 'POST only'}, status=400)
     
     try:
-        print("\n📝 Step 1: Parsing request body...")
         data = json.loads(request.body)
         answers = data.get('answers', {})
-        print(f"✅ Parsed {len(answers)} answers from request")
-        
-        print("\n📝 Step 2: Getting session data...")
         student_name = request.session.get('student_name')
         exam_code = request.session.get('exam_code')
-        print(f"✅ Student: {student_name}")
-        print(f"✅ Exam Code: {exam_code}")
+        pern_no = request.session.get('pern_no')
         
-        if not student_name or not exam_code:
-            print("❌ Missing session data!")
-            return JsonResponse({'error': 'Session expired'}, status=400)
+        # NEW: Get config + individual questions
+        config_doc = db.collection('questions').document('config').get()
+        questions = config_doc.to_dict()['questions'] if config_doc.exists else []
         
-        print("\n📝 Step 3: Connecting to Firebase...")
+        if not questions:
+            questions_docs = list(db.collection('questions').stream())
+            questions = [q.to_dict() for q in questions_docs if q.id != 'config']
         
-        # db = get_db()
-        print("✅ Firebase connected")
-        
-        print("\n📝 Step 4: Fetching questions from database...")
-        questions_ref = db.collection('questions')
-        questions_docs = list(questions_ref.stream())
-        print(f"✅ Found {len(questions_docs)} questions in database")
-        
-        if not questions_docs:
-            print("❌ No questions found in database!")
-            return JsonResponse({'error': 'No questions found'}, status=400)
-        
-        print("\n📝 Step 5: Converting questions to list...")
-        questions = []
-        for q_doc in questions_docs:
-            q_data = q_doc.to_dict()
-            q_data['doc_id'] = q_doc.id
-            questions.append(q_data)
-            print(f"   - Q{q_doc.id}: {q_data.get('question', '')[:50]}...")
-        
-        print("\n📝 Step 6: Evaluating answers...")
         score = 0
         result_details = []
+        grader = DescriptiveAnswerGrader()  # NEW Transformer grader
         
-        for i, q in enumerate(questions):
-            q_id = q.get('doc_id')
+        for q in questions:
+            q_id = q['id']
             user_ans = answers.get(q_id, {})
-            q_type = q.get('type', 'unknown')
-            
-            print(f"\n   Question {i+1}/{len(questions)} ({q_type}):")
-            print(f"   - ID: {q_id}")
+            q_type = q['type']
             
             if q_type == 'mcq':
                 selected = user_ans.get('selectedOption', '')
-                correct_option = q.get('correct_option', '')
-                is_correct = (selected == correct_option) if selected and correct_option else False
-                
-                if is_correct:
-                    score += 1
-                
-                print(f"   - Your answer: {selected}")
-                print(f"   - Correct answer: {correct_option}")
-                print(f"   - Result: {'✅ Correct' if is_correct else '❌ Wrong'}")
-                
-                result_details.append({
-                    'question': q.get('question', ''),
-                    'type': 'MCQ',
-                    'your_answer': selected,
-                    'correct_answer': correct_option,
-                    'correct': is_correct,
-                    'score': 100 if is_correct else 0
-                })
+                is_correct = selected == q.get('correct_option')
+                q_score = q['max_score'] if is_correct else 0.0
+                score += q_score
+                details = {'type': 'MCQ', 'correct': is_correct, 'max_score': q['max_score']}
             
             else:  # descriptive
-                student_answer = user_ans.get('answer', '')
-                correct_answer = q.get('correct_answer', '')
-                
-                print(f"   - Your answer: {student_answer[:50]}...")
-                print(f"   - Correct answer: {correct_answer[:50]}...")
-                
-                if student_answer and correct_answer:
-                    similarity, ai_score, is_correct = evaluate_answer(student_answer, correct_answer)
-                    print(f"   - Similarity: {similarity:.2f}")
-                    print(f"   - AI Score: {ai_score:.2f}%")
-                    print(f"   - Result: {'✅ Correct' if is_correct else '❌ Wrong'}")
+                student_ans = user_ans.get('answer', '')
+                if not student_ans.strip():
+                    q_score = 0.0
+                    details = {'type': 'Descriptive', 'score': 0.0, 'max_score': q['max_score']}
                 else:
-                    similarity, ai_score, is_correct = 0.0, 0.0, False
-                    print(f"   - Result: ❌ No answer provided")
-                
-                if is_correct:
-                    score += 1
-                
-                result_details.append({
-                    'question': q.get('question', ''),
-                    'type': 'Descriptive',
-                    'your_answer': student_answer,
-                    'correct_answer': correct_answer,
-                    'correct': is_correct,
-                    'score': float(ai_score)
-                })
+                    # NEW: Hybrid grading with concepts
+                    concepts = [Concept(**c) for c in q.get('concepts', [])]
+                    cfg = QuestionConfig(q_id, q['teacher_answer'], concepts, q['max_score'])
+                    result = grader.grade(cfg, student_ans)
+                    q_score = result['final_score']
+                    score += q_score
+                    details = {
+                        'type': 'Descriptive',
+                        'concept_score': result['concept_score'],
+                        'relation_score': result['relation_score'],
+                        'semantic_similarity': result['semantic_similarity'],
+                        'penalty': result['penalty'],
+                        'max_score': q['max_score']
+                    }
+            
+            result_details.append({
+                'q_id': q_id,
+                'question': q['question'][:100] + '...' if len(q['question']) > 100 else q['question'],
+                'your_answer': user_ans.get('answer', user_ans.get('selectedOption', '')),
+                'score': round(q_score, 1),
+                'details': details
+            })
         
-        print(f"\n📊 Final Score: {score}/{len(questions)}")
-        
-        print("\n📝 Step 7: Saving to Firestore...")
+        # Save enhanced results
+        result_id = str(uuid.uuid4())
+        total_max = sum(q.get('max_score', 1.0) for q in questions)
         result_data = {
             'exam_code': exam_code,
             'student_name': student_name,
-            'pern_no': request.session.get('pern_no'), 
-            'score': int(score),
-            'total': len(questions),
+            'pern_no': pern_no,
+            'total_score': float(score),
+            'total_questions': len(questions),
+            'total_max_score': total_max,
+            'percentage': round((score / total_max) * 100, 1),
             'details': result_details,
-            'timestamp': datetime.now().isoformat()
+            'timestamp': SERVER_TIMESTAMP
         }
+        db.collection('results').document(result_id).set(result_data)
         
-        print(f"   - Exam Code: {exam_code}")
-        print(f"   - Student: {student_name}")
-        print(f"   - Score: {score}/{len(questions)}")
-        
-        # Save to database
-        doc_ref = db.collection('results').add(result_data)
-        print(f"✅ Result saved to Firestore! Doc ID: {doc_ref[1].id}")
-        
-        print("\n✅ SUCCESS: Exam submitted completely!")
-        print("="*60 + "\n")
-        
-        # Return success response
         return JsonResponse({
             'success': True,
-            'score': score,
-            'total': len(questions),
-            'details': result_details,
-            'message': 'Exam submitted successfully'
-        }, status=200)
-    
-    except json.JSONDecodeError as e:
-        print(f"❌ JSON decode error: {e}")
-        return JsonResponse({'error': 'Invalid JSON format'}, status=400)
+            'total_score': round(score, 1),
+            'percentage': round((score / total_max) * 100, 1),
+            'details': result_details
+        })
     
     except Exception as e:
-        error_msg = str(e)
-        print(f"\n❌ ERROR: {error_msg}")
-        import traceback
-        traceback.print_exc()
-        print("="*60 + "\n")
-        return JsonResponse({'error': f'Server error: {error_msg}'}, status=500)
-
+        return JsonResponse({'error': str(e)}, status=500)
 
 def student_results(request):
-    """Display exam results page"""
     if not request.session.get('student_logged_in'):
         return redirect('login')
-    
     return render(request, 'results.html')

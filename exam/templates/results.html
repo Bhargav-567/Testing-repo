@@ -1,31 +1,124 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="max-w-3xl mx-auto p-6 bg-white rounded shadow-lg">
-<h2 class="text-2xl font-semibold mb-4">📊 Your Results</h2>
-<div id="results"></div>
-</div>
-<script>
-const data = JSON.parse(sessionStorage.getItem('exam_results'));
-console.log(data);
-if (data) {
-  const percentage = (data.score / data.total) * 100;
-  document.getElementById('results').innerHTML = `
-    <div class="mb-4 p-4 bg-green-100 rounded">
-      <h3 class="text-xl font-bold">Score: ${data.score} / ${data.total}</h3>
-      <p class="mt-2">Percentage: ${percentage.toFixed(2)}%</p>
+<div class="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-xl">
+  <div class="text-center mb-8">
+    <h2 class="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">📊 Your Exam Results</h2>
+    <div id="summary" class="bg-gradient-to-r from-green-50 to-blue-50 p-6 rounded-xl border-2 border-green-200">
+      <!-- Dynamic summary loaded by JS -->
     </div>
-    <h4 class="font-semibold mb-2">Detailed Breakdown</h4>
-    ${data.details.map((d,i) => `
-      <div class="border p-3 mb-2 rounded ${d.correct ? 'bg-green-50' : 'bg-red-50'}">
-        <h5 class="font-semibold mb-1">Q${i+1}: ${d.question}</h5>
-        <p><strong>Your Answer:</strong> ${d.your_answer}</p>
-        <p><strong>Correct Answer:</strong> ${d.correct_answer}</p>
-        <p><strong>Status:</strong> ${d.correct ? '✅ Correct' : '❌ Incorrect'}</p>
-        <p><strong>Score:</strong> ${d.score}%</p>
+  </div>
+  
+  <div id="questions-breakdown" class="space-y-4"></div>
+  
+  <div class="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
+    <button onclick="printResults()" class="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition">🖨️ Print Results</button>
+    <a href="/" class="bg-gray-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-gray-700 text-center transition">🏠 Home</a>
+  </div>
+</div>
+
+<script>
+const data = JSON.parse(sessionStorage.getItem('exam_results') || '{}');
+console.log('Results data:', data);
+
+if (data && data.details) {
+  const totalMax = data.total_max_score || data.total * 1;
+  const percentage = ((data.total_score || data.score) / totalMax) * 100;
+  
+  // Summary Card
+  document.getElementById('summary').innerHTML = `
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="text-center p-4 bg-white rounded-lg shadow">
+        <div class="text-4xl font-bold text-green-600">${(data.total_score || data.score).toFixed(1)}</div>
+        <div class="text-gray-600 mt-1">Total Score</div>
       </div>
-    `).join('')}
-    <button onclick="location.href='/'" class="mt-4 bg-gray-300 px-4 py-2 rounded hover:bg-gray-400">Exit</button>
+      <div class="text-center p-4 bg-white rounded-lg shadow">
+        <div class="text-4xl font-bold text-blue-600">${percentage.toFixed(1)}%</div>
+        <div class="text-gray-600 mt-1">Percentage</div>
+      </div>
+      <div class="text-center p-4 bg-white rounded-lg shadow">
+        <div class="text-4xl font-bold text-purple-600">${data.details.length}</div>
+        <div class="text-gray-600 mt-1">Questions</div>
+      </div>
+    </div>
   `;
+  
+  // Question Breakdown
+  let html = '';
+  data.details.forEach((d, i) => {
+    const scorePerc = (d.score / (d.details?.max_score || 1)) * 100;
+    const statusClass = scorePerc >= 70 ? 'bg-green-50 border-green-200' : 
+                       scorePerc >= 40 ? 'bg-yellow-50 border-yellow-200' : 'bg-red-50 border-red-200';
+    
+    html += `
+      <div class="question-result border-2 ${statusClass} rounded-xl p-6 hover:shadow-lg transition">
+        <div class="flex justify-between items-start mb-4">
+          <h3 class="font-bold text-xl">Q${i+1}: ${d.question}</h3>
+          <div class="text-right">
+            <div class="text-2xl font-bold text-gray-800">${d.score.toFixed(1)}</div>
+            <div class="text-sm text-gray-500">${d.details?.max_score || 1} pts</div>
+          </div>
+        </div>
+        
+        ${d.details?.type === 'Descriptive' ? `
+          <details class="descriptive-details">
+            <summary class="cursor-pointer font-semibold mb-3 p-2 bg-gray-100 rounded">📊 Detailed Breakdown</summary>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3 text-sm">
+              <div class="p-3 bg-blue-50 rounded">
+                <div class="font-bold text-blue-700">${(d.details.concept_score * 100).toFixed(0)}%</div>
+                <div class="text-xs text-gray-600">Concepts</div>
+              </div>
+              <div class="p-3 bg-purple-50 rounded">
+                <div class="font-bold text-purple-700">${(d.details.semantic_similarity * 100).toFixed(0)}%</div>
+                <div class="text-xs text-gray-600">Semantic</div>
+              </div>
+              <div class="p-3 bg-green-50 rounded">
+                <div class="font-bold text-green-700">${(d.details.relation_score * 100).toFixed(0)}%</div>
+                <div class="text-xs text-gray-600">Relations</div>
+              </div>
+              <div class="p-3 bg-red-50 rounded">
+                <div class="font-bold text-red-700">${(d.details.penalty * 100).toFixed(0)}%</div>
+                <div class="text-xs text-gray-600">Penalty</div>
+              </div>
+            </div>
+            <div class="mt-4 pt-4 border-t grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p class="font-semibold mb-1">👨‍🏫 Teacher Answer:</p>
+                <p class="bg-gray-100 p-3 rounded text-sm">${d.details.teacher_answer || 'N/A'}</p>
+              </div>
+              <div>
+                <p class="font-semibold mb-1">📝 Your Answer:</p>
+                <p class="bg-blue-50 p-3 rounded text-sm">${d.your_answer || 'No answer'}</p>
+              </div>
+            </div>
+          </details>
+        ` : `
+          <div class="mcq-result p-4 bg-gray-100 rounded-lg">
+            <p><strong>Type:</strong> ${d.details.type} ${d.details.correct ? '✅ Correct' : '❌ Wrong'}</p>
+            ${d.details.selected ? `<p>Your: ${d.details.selected}</p>` : ''}
+            ${d.details.correct_option ? `<p>Correct: ${d.details.correct_option}</p>` : ''}
+          </div>
+        `}
+      </div>
+    `;
+  });
+  
+  document.getElementById('questions-breakdown').innerHTML = html;
+} else {
+  document.getElementById('summary').innerHTML = '<p class="text-red-500">No results found. Please take an exam first.</p>';
+}
+</script>
+
+<style>
+details summary::-webkit-details-marker { display: none; }
+details summary::before { content: '▼ '; }
+descriptive-details[open] summary::before { content: '▲ '; }
+.question-result summary { list-style: none; }
+.question-result summary::-webkit-details-marker { display: none; }
+</style>
+
+<script>
+function printResults() {
+  window.print();
 }
 </script>
 {% endblock %}
