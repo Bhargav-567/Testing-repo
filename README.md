@@ -54,6 +54,15 @@ venv\Scripts\activate
 
 pip install -r requirements.txt
 
+- Note: If any error related to setup *wheel* faced, upgrade the python version by running
+  ```plaintext
+
+  pip install --upgrade pip setuptools wheel
+
+  python.exe -m pip install --upgrade pip
+
+  ```
+
 
 4. **Configure Firebase**
 
@@ -113,6 +122,7 @@ This project is licensed under the MIT License.
 ## Contact
 
 For any queries or feature requests, please open an issue or reach out to the maintainer.
+
 
 
 
