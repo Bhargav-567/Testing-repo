@@ -52,14 +52,17 @@ venv\Scripts\activate
 
 3. **Install dependencies**
 
-pip install -r requirements.txt
-
-- Note: If any error related to setup *wheel* faced, upgrade the python version by running
   ```plaintext
 
-  pip install --upgrade pip setuptools wheel
+    pip install -r requirements.txt
 
-  python.exe -m pip install --upgrade pip
+  ```
+
+- Model for spacy
+  ```plaintext
+
+  pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0-py3-none-any.whl
+
 
   ```
 
@@ -122,6 +125,7 @@ This project is licensed under the MIT License.
 ## Contact
 
 For any queries or feature requests, please open an issue or reach out to the maintainer.
+
 
 
 
