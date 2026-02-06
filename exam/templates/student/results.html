@@ -1,0 +1,194 @@
+{% extends 'base.html' %}
+{% block title %}Exam Results{% endblock %}
+
+{% block extra_css %}
+<style>
+.fade-in { animation: fadeIn 0.5s ease-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.letter-badge { font-family: 'Courier New', monospace; font-weight: 700; }
+@media (max-width: 768px) {
+    .text-xl { font-size: 1.1rem; }
+    .text-2xl { font-size: 1.25rem; }
+    .text-3xl { font-size: 1.5rem; }
+    .text-4xl { font-size: 1.75rem; }
+    .leading-tight { line-height: 1.3; }
+    .p-4 { padding: 1rem; }
+    .gap-4 { gap: 1rem; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto p-4 sm:p-6">
+    <!-- RESULTS HEADER -->
+    <div class="text-center mb-8 sm:mb-12 fade-in">
+        <h1 class="text-2xl sm:text-4xl md:text-5xl font-bold text-gray-800 mb-4">📊 Exam Results</h1>
+        <div class="bg-white rounded-xl p-4 sm:p-6 shadow-sm border">
+            <p class="text-lg sm:text-xl font-semibold text-gray-800">{{ student_name|default:"Student" }}</p>
+            <p class="text-lg font-bold text-blue-600 mt-1">{{ exam_code|upper }}</p>
+        </div>
+    </div>
+
+    {% if error %}
+    <div class="bg-red-50 border border-red-200 rounded-xl p-6 sm:p-8 text-center mb-8 fade-in">
+        <div class="text-4xl sm:text-6xl mb-4">❌</div>
+        <h2 class="text-xl sm:text-2xl font-bold text-red-800 mb-4">{{ error }}</h2>
+        <a href="{% url 'enter_exam_code' %}" class="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors">
+            ← Back to Exams
+        </a>
+    </div>
+    {% else %}
+
+    <!-- TOTAL SCORE CARDS -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-12 fade-in">
+        <div class="bg-white border border-gray-200 rounded-xl p-6 sm:p-8 text-center hover:shadow-md transition-shadow">
+            <div class="text-3xl sm:text-4xl lg:text-5xl font-bold text-emerald-600 mb-2">{{ results.total_score|floatformat:1 }}</div>
+            <div class="text-sm sm:text-base font-semibold text-gray-700 uppercase tracking-wide">Score</div>
+            <div class="text-lg sm:text-xl text-gray-600">/ {{ results.max_possible|floatformat:1 }}</div>
+        </div>
+        
+        <div class="bg-white border border-gray-200 rounded-xl p-6 sm:p-8 text-center hover:shadow-md transition-shadow">
+            <div class="text-3xl sm:text-4xl lg:text-5xl font-bold text-blue-600 mb-2">{{ results.percentage|floatformat:1 }}<span class="text-2xl sm:text-3xl">%</span></div>
+            <div class="text-sm sm:text-base font-semibold text-gray-700 uppercase tracking-wide">Percentage</div>
+            <div class="text-sm text-gray-600">Grade: 
+                {% if results.percentage >= 90 %}A+{% elif results.percentage >= 80 %}A{% elif results.percentage >= 70 %}B{% elif results.percentage >= 60 %}C{% else %}D{% endif %}
+            </div>
+        </div>
+        
+        <div class="bg-white border border-gray-200 rounded-xl p-6 sm:p-8 text-center hover:shadow-md transition-shadow">
+            <div class="text-3xl sm:text-4xl lg:text-5xl font-bold text-purple-600 mb-2">{{ results.evaluation|length }}</div>
+            <div class="text-sm sm:text-base font-semibold text-gray-700 uppercase tracking-wide">Questions</div>
+            <div class="text-sm text-gray-600">Completed</div>
+        </div>
+    </div>
+
+    <!-- INDIVIDUAL QUESTIONS -->
+    <div class="space-y-6 sm:space-y-8 mb-12 fade-in">
+        {% for detail in results.evaluation %}
+        <div class="bg-white border border-gray-200 rounded-xl p-6 sm:p-8 hover:shadow-md transition-shadow">
+            <!-- QUESTION HEADER -->
+            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 sm:gap-6 mb-6 pb-4 border-b border-gray-200">
+                <div class="flex-1">
+                    <h2 class="text-xl sm:text-2xl md:text-3xl font-bold text-gray-800 mb-2 flex items-center gap-3">
+                        {{ detail.question_id }}.
+                        <span class="px-3 py-1 bg-blue-100 text-blue-800 text-sm sm:text-base font-bold rounded-lg">
+                            {{ detail.type|upper }}
+                        </span>
+                    </h2>
+                    <p class="text-base sm:text-lg md:text-xl text-gray-700 leading-tight">{{ detail.question }}</p>
+                </div>
+                <div class="text-right sm:text-left flex flex-col items-end sm:items-start gap-1 sm:gap-2">
+                    <div class="text-2xl sm:text-3xl lg:text-4xl font-bold 
+                        {% if detail.is_correct %}text-emerald-600
+                        {% elif detail.normalized > 0.4 %}text-amber-600
+                        {% else %}text-red-600{% endif %}">
+                        {{ detail.final_score|floatformat:1 }}
+                    </div>
+                    <div class="text-lg sm:text-xl text-gray-600">/ {{ detail.max_score|floatformat:1 }}</div>
+                    <div class="text-base font-semibold text-gray-500">({{ detail.normalized|floatformat:0 }}%)</div>
+                </div>
+            </div>
+
+            <!-- ANSWERS COMPARISON -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div>
+                    <h4 class="text-lg sm:text-xl font-bold text-gray-800 mb-3 flex items-center gap-2">📝 Your Answer</h4>
+                    <div class="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 sm:p-6 min-h-[100px] sm:min-h-[120px]">
+                        <div class="text-base sm:text-lg text-gray-800 leading-tight bg-white/50 p-4 rounded-lg border-l-4 border-blue-300">
+                            {{ detail.student_answer|default:"No answer provided"|linebreaksbr }}
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <h4 class="text-lg sm:text-xl font-bold text-gray-800 mb-3 flex items-center gap-2">✅ Model Answer</h4>
+                    <div class="bg-green-50 border-2 border-green-200 rounded-lg p-4 sm:p-6 min-h-[100px] sm:min-h-[120px]">
+                        <div class="text-base sm:text-lg text-gray-800 leading-tight font-medium bg-white/50 p-4 rounded-lg border-l-4 border-green-300">
+                            {{ detail.teacher_answer|default:"N/A"|linebreaksbr }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MCQ OPTIONS (Simplified) -->
+            {% if detail.type == 'mcq' and detail.options %}
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 p-6 bg-gray-50 rounded-lg mb-6">
+                <div>
+                    <h4 class="text-lg font-bold mb-4">🎯 Your Choice: {{ detail.selected_option|default:"None" }}</h4>
+                    {% for option in detail.options %}
+                    {% with forloop.counter as opt_num %}
+                    <div class="{% if detail.selected_option == option %}{% if detail.is_correct %}bg-emerald-100 border-emerald-400{% else %}bg-red-100 border-red-400{% endif %}{% elif option == detail.teacher_answer %}bg-green-100 border-green-400{% else %}bg-white border-gray-200{% endif %} p-4 border rounded-lg mb-2">
+                        <span class="w-10 h-10 font-bold text-xl rounded-lg mr-4 inline-flex items-center justify-center text-sm
+                            {% if detail.selected_option == option %}{% if detail.is_correct %}bg-emerald-500 text-white{% else %}bg-red-500 text-white{% endif %}{% elif option == detail.teacher_answer %}bg-green-500 text-white{% else %}bg-gray-200 text-gray-800{% endif %}">
+                            {% if opt_num == 1 %}A{% elif opt_num == 2 %}B{% elif opt_num == 3 %}C{% else %}D{% endif %}
+                        </span>
+                        <span class="font-semibold">{{ option }}</span>
+                    </div>
+                    {% endwith %}
+                    {% endfor %}
+                </div>
+                <div>
+                    <h4 class="text-lg font-bold mb-4">✅ Correct: {{ detail.teacher_answer }}</h4>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- AI BREAKDOWN (Simplified - Desktop Only) -->
+            {% if detail.show_breakdown %}
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 p-4 sm:p-6 bg-gray-50 rounded-lg mb-4 hidden md:grid">
+                <div class="text-center p-3">
+                    <div class="text-2xl font-bold text-purple-600">{{ detail.concept_score|floatformat:2 }}</div>
+                    <div class="text-xs uppercase text-purple-800 font-semibold">Concepts</div>
+                </div>
+                <div class="text-center p-3">
+                    <div class="text-2xl font-bold text-blue-600">{{ detail.relation_score|floatformat:2 }}</div>
+                    <div class="text-xs uppercase text-blue-800 font-semibold">Relations</div>
+                </div>
+                <div class="text-center p-3">
+                    <div class="text-2xl font-bold text-emerald-600">{{ detail.semantic_similarity|floatformat:2 }}</div>
+                    <div class="text-xs uppercase text-emerald-800 font-semibold">AI Score</div>
+                </div>
+                <div class="text-center p-3">
+                    <div class="text-2xl font-bold text-red-600">-{{ detail.penalty|floatformat:2 }}</div>
+                    <div class="text-xs uppercase text-red-800 font-semibold">Penalty</div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- CONCEPTS TAGS -->
+            {% if detail.concepts %}
+            <div class="flex flex-wrap gap-2 mt-4 pt-4 border-t border-gray-200">
+                {% for concept in detail.concepts %}
+                <span class="px-3 py-1 bg-blue-100 text-blue-800 text-sm font-semibold rounded-lg">
+                    {{ concept }}
+                </span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- ACTION BUTTONS -->
+    <div class="text-center p-8 bg-gray-50 rounded-xl border-2 border-gray-200 fade-in">
+        <div class="flex flex-col sm:flex-row gap-4 justify-center items-center max-w-2xl mx-auto">
+            <a href="{% url 'take_exam' %}" class="flex-1 inline-flex items-center justify-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors text-base sm:text-lg">
+                📝 Take Another Exam
+            </a>
+            <a href="{% url 'enter_exam_code' %}" class="flex-1 inline-flex items-center justify-center gap-2 bg-emerald-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-emerald-700 transition-colors text-base sm:text-lg">
+                🔄 Retake This Exam
+            </a>
+        </div>
+        <p class="text-gray-600 mt-6 text-sm sm:text-base font-semibold">Results saved • Detailed analysis available</p>
+    </div>
+
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function printResults() {
+    window.print();
+}
+</script>
+{% endblock %}

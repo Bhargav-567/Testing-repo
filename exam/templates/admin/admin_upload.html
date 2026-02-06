@@ -1,0 +1,206 @@
+{% extends 'base.html' %}
+
+{% block title %}Upload Questions - Exam System{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="bg-white rounded-lg shadow-lg p-8">
+        <h2 class="text-3xl font-bold mb-2 text-gray-800">📤 Upload Questions</h2>
+        <p class="text-gray-600 mb-6">Upload an Excel (.xlsx) or CSV file with your exam questions</p>
+        
+        <!-- Success Message -->
+        {% if success %}
+        <div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-6">
+            <p class="font-bold">✅ Success!</p>
+            <p>{{ success }}</p>
+        </div>
+        {% endif %}
+        
+        <!-- Error Message -->
+        {% if error %}
+        <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6">
+            <p class="font-bold">❌ Error</p>
+            <p>{{ error }}</p>
+        </div>
+        {% endif %}
+
+        <!-- Add this button in the header section (after "New Exam" button) -->
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="fas fa-list"></i> All Exams</h5>
+            <div class="d-flex gap-2">
+                <a href="{% url 'admin_upload' %}" class="btn btn-primary">
+                    <i class="fas fa-upload"></i> New Exam
+                </a>
+                <a href="{% url 'download_sample_excel' %}" class="btn btn-success">
+                    <i class="fas fa-file-excel"></i> Download Sample
+                </a>
+                <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    Actions
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a href="{% url 'download_sample_excel' %}"
+                    class="flex items-center gap-2 px-4 py-2 text-sm border border-black rounded-md text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition">
+                        <i class="fas fa-download"></i>
+                        <span>Sample Excel</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        
+        
+        <!-- Excel Format Example (UPDATED) -->
+
+        <div class="alert alert-info">
+            <i class="fas fa-lightbulb"></i> 
+            <strong>Need sample?</strong> 
+            <a href="{% url 'download_sample_excel' %}" class="text-green-600 hover:text-green-700 font-medium underline">
+                Download Descriptive_Master_Sample.xlsx
+            </a>
+        </div>
+
+        
+
+            <!-- SEPARATOR RULES -->
+            <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl shadow-lg">
+                <div>
+                    <h4 class="font-bold text-xl mb-4 flex items-center">
+                        <span class="w-2 h-2 bg-white rounded-full mr-3"></span>Separators
+                    </h4>
+                    <div class="space-y-3 text-blue-100">
+                        <div><span class="font-mono bg-white/20 px-2 py-1 rounded text-xs">, (comma)</span> → concepts, keywords</div>
+                        <div><span class="font-mono bg-white/20 px-2 py-1 rounded text-xs">|</span> → MCQ options (pipe)</div>
+                        <div><span class="font-mono bg-white/20 px-2 py-1 rounded text-xs">A,B,C</span> → Teacher_Answer (letter)</div>
+                    </div>
+                </div>
+                <div>
+                    <h4 class="font-bold text-xl mb-4 flex items-center">
+                        <span class="w-2 h-2 bg-white rounded-full mr-3"></span>Quick Rules
+                    </h4>
+                    <ul class="space-y-2 text-sm">
+                        <li>• <strong>Required:</strong> Q_ID, Question, Type, Teacher_Answer, Max_Score</li>
+                        <li>• <strong>Descriptive:</strong> col_names (concepts), keywords</li>
+                        <li>• <strong>MCQ:</strong> options (A|B|C|D), Teacher_Answer (A,B,C...)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+
+
+
+        
+        <!-- Upload Form -->
+        <form method="POST" enctype="multipart/form-data">
+            {% csrf_token %}
+            
+            <div class="mb-6">
+                <label class="block text-gray-700 font-semibold mb-2">Select File:</label>
+                <input type="file" name="file" accept=".xlsx,.xls,.csv" required
+                       class="w-full px-4 py-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <p class="text-sm text-gray-500 mt-2">Supported: .xlsx, .xls, .csv</p>
+            </div>
+            
+            <div class="mb-6">
+                <label class="block text-gray-700 font-semibold mb-2">Exam Code :</label>
+                <input type="text" name="exam_code" value="" required placeholder="E.g. EXAM123"
+                       class="w-full px-4 py-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            
+            <div class="mb-6">
+                <label class="block text-gray-700 font-semibold mb-2">Exam Duration (minutes):</label>
+                <input type="number" name="duration" value="60" min="1" required
+                       class="w-full px-4 py-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            
+            <div class="flex gap-4">
+                <button type="submit" 
+                        class="flex-1 bg-blue-600 text-white py-3 rounded font-semibold hover:bg-blue-700 transition">
+                    ✅ Upload Questions
+                </button>
+                <a href="{% url 'admin_dashboard' %}" 
+                   class="flex-1 bg-gray-400 text-white py-3 rounded font-semibold hover:bg-gray-500 transition text-center">
+                    ← Back
+                </a>
+            </div>
+        </form>
+
+        
+    </div>
+</div>
+
+<!-- Success Div (Bottom Left - 10 sec) -->
+<div id="successDiv" class="fixed bottom-4 left-4 bg-green-600 text-white px-6 py-4 rounded-lg shadow-xl z-50 hidden animate-slide-up" style="max-width: 350px;">
+    <div class="flex items-center justify-between">
+        <span id="successText">✅ Upload Successful!</span>
+        <button onclick="hideSuccess()" class="ml-4 text-white hover:text-gray-200">&times;</button>
+    </div>
+</div>
+
+<style>
+@keyframes slide-up {
+    from { transform: translateY(100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+.animate-slide-up {
+    animation: slide-up 0.3s ease-out;
+}
+</style>
+
+<script>
+function showSuccess(message) {
+    document.getElementById('successText').textContent = message;
+    document.getElementById('successDiv').classList.remove('hidden');
+    
+    // Auto-hide after 10 seconds
+    setTimeout(hideSuccess, 10000);
+}
+
+function hideSuccess() {
+    document.getElementById('successDiv').classList.add('hidden');
+}
+
+// Show success if backend sent it
+{% if success %}
+    showSuccess('{{ success }}');
+{% endif %};
+
+// Update form for AJAX (no page reload)
+document.querySelector('form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const btn = this.querySelector('button[type="submit"]');
+    const originalText = btn.innerHTML;
+    
+    btn.innerHTML = '⏳ Uploading...';
+    btn.disabled = true;
+    
+    fetch('', {
+        method: 'POST',
+        body: formData,
+        headers: {'X-Requested-With': 'XMLHttpRequest'}
+    })
+    .then(res => res.json())
+    .then(data => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        
+        if (data.success) {
+            showSuccess(data.message || '✅ Upload Complete!');
+            this.reset();
+        } else {
+            alert('❌ ' + (data.error || 'Upload failed'));
+        }
+    })
+    .catch(() => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        alert('❌ Network error');
+    });
+});
+</script>
+
+
+
+{% endblock %}

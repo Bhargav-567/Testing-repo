@@ -1,0 +1,8 @@
+firebase-credentials.json
+
+# Python cache and environment files
+__pycache__/
+*.pyc
+*.pyo
+venv/
+
