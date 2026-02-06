@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 from django.db import models
 
 # Firestore-native
@@ -27,7 +26,6 @@ class ExamResult:
     def get_by_student(cls, student_id):
         results = db.collection('exam_results').where('student_id', '==', student_id).stream()
         return [doc.to_dict() for doc in results]
-=======
 from django.db import models
 
 # Firestore-native
@@ -56,4 +54,3 @@ class ExamResult:
     def get_by_student(cls, student_id):
         results = db.collection('exam_results').where('student_id', '==', student_id).stream()
         return [doc.to_dict() for doc in results]
->>>>>>> dev
