@@ -1,0 +1,442 @@
+{% extends 'base.html' %}
+
+{% block title %}Take Exam - Exam System{% endblock %}
+
+{% block content %}
+<div class="w-full">
+    <!-- Timer Bar - Sticky at Top -->
+    <div class="sticky top-20 bg-gradient-to-r from-red-600 to-red-700 text-white px-4 md:px-6 py-4 rounded-lg mb-6 flex flex-col md:flex-row justify-between items-center gap-4 shadow-lg z-40">
+        <h2 class="text-xl md:text-2xl font-bold flex items-center gap-2">
+            <span>📝</span> Exam in Progress
+        </h2>
+        <div class="flex items-center gap-4">
+            <div class="text-3xl md:text-4xl font-bold font-mono bg-red-800 px-4 py-2 rounded-lg" id="timer">60:00</div>
+            <span class="text-sm md:text-base text-red-100">Time Left</span>
+        </div>
+    </div>
+    
+    <!-- Exam Info Card -->
+    <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-blue-600 rounded-lg p-4 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <p class="text-sm text-gray-600">Student Name</p>
+                <p class="font-bold text-lg text-gray-800">{{ request.session.student_name }}</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-600">Exam Code</p>
+                <p class="font-bold text-lg text-blue-600">{{ exam_code }}</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-600">Total Questions</p>
+                <p class="font-bold text-lg text-gray-800" id="total_questions">0</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Questions Per Page Selector (Mobile Responsive) -->
+    <div class="bg-white rounded-lg shadow-md p-4 mb-6">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div class="w-full md:w-auto">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Questions Per Page:</label>
+                <select id="questions_per_page" onchange="changeQuestionsPerPage()" 
+                        class="w-full md:w-40 px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="5">5 Questions</option>
+                    <option value="10" selected>10 Questions</option>
+                    <option value="15">15 Questions</option>
+                    <option value="20">20 Questions</option>
+                </select>
+            </div>
+            <div class="w-full md:w-auto">
+                <p class="text-sm font-semibold text-gray-700 mb-2">Current Page</p>
+                <p class="text-lg font-bold text-blue-600"><span id="current_page">1</span> / <span id="total_pages">1</span></p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Questions Container -->
+    <div id="questions_container" class="space-y-6 mb-8"></div>
+    
+    <!-- Navigation Controls - Responsive -->
+    <div class="bg-white rounded-lg shadow-md p-4 mb-6">
+        <div class="flex flex-col md:flex-row justify-between items-center gap-3">
+            <button onclick="prevPage()" class="w-full md:w-auto bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-semibold transition">
+                ⬅️ Previous
+            </button>
+            <span class="text-center font-bold text-gray-800 text-lg">
+                Page <span id="page_info_current">1</span> of <span id="page_info_total">1</span>
+            </span>
+            <button onclick="nextPage()" class="w-full md:w-auto bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-semibold transition">
+                Next ➡️
+            </button>
+        </div>
+    </div>
+    
+    <!-- Action Buttons - Responsive -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <button onclick="submitExam()" class="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white py-4 rounded-lg font-bold text-lg transition shadow-lg">
+            🏁 Finish Exam & Submit
+        </button>
+        <button onclick="confirmQuit()" class="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white py-4 rounded-lg font-bold text-lg transition shadow-lg">
+            ❌ Quit Exam
+        </button>
+        <a href="{% url 'logout' %}" class="w-full bg-gray-600 hover:bg-gray-700 text-white py-4 rounded-lg font-bold text-lg transition shadow-lg text-center">
+            🔙 Back to Login
+        </a>
+    </div>
+
+
+</div>
+
+<script>
+// ======================================
+// COMPLETE TAKE EXAM JAVASCRIPT
+// ======================================
+
+// Fallback for status functions
+window.showStatus = window.showStatus || function(type, title, subtitle, progress) {
+    console.log(`📱 ${type.toUpperCase()}: ${title}`);
+};
+window.updateProgress = window.updateProgress || function(progress, title) {
+    console.log(`📊 Progress: ${progress}% - ${title}`);
+};
+
+// Global Variables
+let currentPage = 1;
+let questionsPerPage = 10;
+let allQuestions = {{ questions|safe }};
+let answers = {};
+let examDuration = parseInt('{{ duration }}') || 60;
+let timeRemaining = examDuration * 60;
+let isSubmitting = false;
+let timerInterval = null;
+let examCode = '{{ exam_code }}'; 
+
+console.log('🚀 Exam initialized');
+console.log('📚 Questions loaded:', allQuestions.length);
+console.log('⏱️  Duration:', examDuration, 'minutes');
+
+// ======================================
+// TIMER SYSTEM
+// ======================================
+function startTimer() {
+    console.log('⏱️  Starting timer...');
+    timerInterval = setInterval(() => {
+        timeRemaining--;
+        const mins = Math.floor(timeRemaining / 60);
+        const secs = timeRemaining % 60;
+        const minsStr = mins.toString().padStart(2, '0');
+        const secsStr = secs.toString().padStart(2, '0');
+        
+        document.getElementById('timer').textContent = `${minsStr}:${secsStr}`;
+        
+        // 5-minute warning
+        if (timeRemaining === 300) {
+            alert('⚠️  5 minutes remaining!');
+            document.getElementById('timer').style.animation = 'pulse 1s infinite';
+        }
+        
+        // Auto-submit
+        if (timeRemaining <= 0) {
+            clearInterval(timerInterval);
+            document.body.innerHTML = '<div class="text-center p-20"><h1 class="text-4xl">⏰ Time Up!</h1><p>Submitting...</p></div>';
+            submitExam();
+        }
+    }, 1000);
+}
+
+// ======================================
+// PAGINATION & DISPLAY
+// ======================================
+function changeQuestionsPerPage() {
+    questionsPerPage = parseInt(document.getElementById('questions_per_page').value);
+    currentPage = 1;
+    displayQuestions();
+}
+
+function displayQuestions() {
+    const start = (currentPage - 1) * questionsPerPage;
+    const end = Math.min(start + questionsPerPage, allQuestions.length);
+    const totalPages = Math.ceil(allQuestions.length / questionsPerPage);
+    
+    let html = '';
+    
+    for (let i = start; i < end; i++) {
+        const q = allQuestions[i];
+        const qNum = i + 1;
+        
+        html += `
+            <div class="bg-white rounded-2xl shadow-xl p-8 border-l-8 border-blue-500 fade-in mb-6">
+                <div class="flex items-start justify-between mb-6">
+                    <h3 class="text-2xl font-bold text-gray-800 flex-1">
+                        Q${qNum}: ${q.question}
+                    </h3>
+                    <span class="ml-4 px-4 py-2 bg-blue-100 text-blue-800 rounded-full text-lg font-bold">
+                        ${q.type === 'mcq' ? 'MCQ' : 'ESSAY'}
+                    </span>
+                </div>
+        `;
+        
+        if (q.type === 'mcq') {
+            // MCQ Options
+            html += '<div class="space-y-3">';
+            for (let j = 0; j < q.options.length; j++) {
+                const opt = q.options[j];
+                const isSelected = answers[q.id] && answers[q.id].selectedOption === opt;
+                const checkedClass = isSelected ? 'bg-blue-500 border-blue-500 shadow-md transform scale-105' : 'hover:bg-gray-100';
+                
+                html += `
+                    <label class="flex items-center p-4 border-2 border-gray-300 rounded-xl cursor-pointer transition-all hover:shadow-md ${checkedClass}">
+                        <input type="radio" name="q_${q.id}" value="${opt}" 
+                               ${isSelected ? 'checked' : ''} 
+                               class="mr-4 w-6 h-6 text-blue-600">
+                        <span class="text-lg font-medium text-gray-800">${opt}</span>
+                    </label>
+                `;
+            }
+            html += '</div>';
+        } else {
+            // Descriptive Answer
+            const answerText = answers[q.id]?.answer || '';
+            html += `
+                <div class="space-y-3">
+                    <textarea name="q_${q.id}" rows="6" 
+                              placeholder="Write your detailed answer here... (AI evaluated)"
+                              class="w-full p-5 border-2 border-gray-300 rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/30 font-serif resize-vertical text-lg"
+                              style="min-height: 160px;">${answerText}</textarea>
+                    <p class="text-sm text-gray-500 italic">
+                        💡 AI evaluates: concepts, structure, similarity to model answer
+                    </p>
+                </div>
+            `;
+        }
+        
+        html += '</div>';
+    }
+    
+    document.getElementById('questions_container').innerHTML = html;
+    document.getElementById('current_page').textContent = currentPage;
+    document.getElementById('total_pages').textContent = totalPages;
+    document.getElementById('page_info_current').textContent = currentPage;
+    document.getElementById('page_info_total').textContent = totalPages;
+    document.getElementById('total_questions').textContent = allQuestions.length;
+    
+    // Navigation buttons
+    const prevBtn = document.querySelector('button[onclick="prevPage()"]');
+    const nextBtn = document.querySelector('button[onclick="nextPage()"]');
+    prevBtn.disabled = currentPage === 1;
+    nextBtn.disabled = currentPage === totalPages;
+    
+    // Re-attach event listeners
+    attachEventListeners(start, end);
+}
+
+function attachEventListeners(start, end) {
+    for (let i = start; i < end; i++) {
+        const q = allQuestions[i];
+        const inputs = document.querySelectorAll(`[name="q_${q.id}"]`);
+        
+        inputs.forEach(input => {
+            input.addEventListener('change', (e) => {
+                if (q.type === 'mcq') {
+                    answers[q.id] = { selectedOption: e.target.value };
+                } else {
+                    answers[q.id] = { answer: e.target.value };
+                }
+                console.log(`✅ Saved answer for ${q.id}`);
+            });
+        });
+    }
+}
+
+function nextPage() {
+    const totalPages = Math.ceil(allQuestions.length / questionsPerPage);
+    if (currentPage < totalPages) {
+        currentPage++;
+        displayQuestions();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+}
+
+function prevPage() {
+    if (currentPage > 1) {
+        currentPage--;
+        displayQuestions();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+}
+
+// ======================================
+// CSRF & SUBMISSION
+// ======================================
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+function submitExam() {
+    if (isSubmitting) {
+        console.log("⚠️  Already submitting...");
+        return;
+    }
+    
+    if (!confirm(`🏁 Submit exam?\n\nQuestions: ${allQuestions.length}\nAnswers: ${Object.keys(answers).length}\n\nThis cannot be undone!`)) {
+        return;
+    }
+    
+    // In submitExam()
+    console.log('📝 Preparing submission data...');
+    const postData = {
+        exam_code: examCode,
+        pern_no: document.getElementById('pern_no').value,  // ✅ REQUIRED
+        student_name: document.getElementById('student_name').value,  // ✅ REQUIRED
+        questions: questionsArray
+    };
+
+    isSubmitting = true;
+    clearInterval(timerInterval);
+    
+    // Loading state
+    const submitBtn = document.querySelector('button[onclick="submitExam()"]');
+    const originalText = submitBtn.textContent;
+    submitBtn.textContent = '⏳ SUBMITTING...';
+    submitBtn.disabled = true;
+    
+    const answerData = {};
+    for (let i = 0; i < allQuestions.length; i++) {
+        const q = allQuestions[i];
+        answerData[q.id] = answers[q.id] || {};
+    }
+    
+    const csrftoken = getCookie('csrftoken');
+    
+    console.log('📤 SUBMITTING...');
+    console.log('- Total questions:', allQuestions.length);
+    console.log('- Answers provided:', Object.keys(answerData).length);
+    console.log('- CSRF Token:', csrftoken ? '✅' : '❌');
+    
+    fetch('/api/submit-exam/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken
+        },
+        body: JSON.stringify({ 
+            exam_code: '{{ exam_code }}',
+            pern_no: '{{ request.session.student_pern }}',
+            student_name: '{{ request.session.student_name }}',
+            answers: answerData,
+            exam_code: '{{ exam_code }}'
+        })
+    })
+    .then(response => {
+        console.log('📡 Response status:', response.status);
+        if (!response.ok) {
+            return response.text().then(text => {
+                throw new Error(`HTTP ${response.status}: ${text}`);
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('✅ SUCCESS!', data);
+        sessionStorage.setItem('exam_results', JSON.stringify(data));
+        
+        // 🎉 Show success + redirect
+        alert(`🎉 Exam Submitted!\nScore: ${data.total_score}/${data.max_possible} (${data.percentage}%)`);
+        window.location.href = `/student/results/?result_id=${data.result_id}`;
+    })
+    .catch(error => {
+        console.error('❌ SUBMISSION FAILED:', error);
+        alert(`❌ Submission Error:\n${error.message}\n\nCheck console (F12) for details`);
+        isSubmitting = false;
+        submitBtn.textContent = originalText;
+        submitBtn.disabled = false;
+        startTimer(); // Restart timer
+    });
+}
+
+function confirmQuit() {
+    if (confirm('❌ Quit exam? Progress will be LOST.')) {
+        clearInterval(timerInterval);
+        window.location.href = '{% url "enter_exam_code" %}';
+    }
+}
+
+// ======================================
+// INITIALIZATION
+// ======================================
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🎯 DOM loaded - Initializing exam...');
+    
+    if (allQuestions.length === 0) {
+        document.body.innerHTML = `
+            <div class="text-center p-20">
+                <h1 class="text-4xl font-bold text-red-600 mb-4">❌ No Questions</h1>
+                <p class="text-xl text-gray-600">Contact administrator</p>
+                <a href="{% url 'enter_exam_code' %}" class="mt-6 inline-block bg-blue-600 text-white px-8 py-3 rounded-xl font-bold">
+                    ← Back to Exams
+                </a>
+            </div>
+        `;
+        return;
+    }
+    
+    startTimer();
+    displayQuestions();
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowLeft') prevPage();
+        if (e.key === 'ArrowRight') nextPage();
+        if (e.key === 'Enter' && e.ctrlKey) submitExam();
+    });
+});
+</script>
+
+
+<style>
+.fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Disable button styling */
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 640px) {
+    .sticky {
+        position: relative;
+        top: 0;
+    }
+    
+    button {
+        padding: 0.75rem 1rem;
+        font-size: 0.875rem;
+    }
+}
+</style>
+{% endblock %}
