@@ -128,4 +128,4 @@ STATICFILES_DIRS = [BASE_DIR / 'exam' / 'static']
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Firebase credentials path
-FIREBASE_CRED = BASE_DIR / 'firestore-credentials.json'
+FIREBASE_CRED = BASE_DIR / 'firebase-credentials.json'
