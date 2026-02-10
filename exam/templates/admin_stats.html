@@ -4,62 +4,61 @@
 
 {% block content %}
 <div class="max-w-6xl mx-auto">
-    <!-- Enhanced Header + Search (NEW) -->
     <div class="bg-gradient-to-r from-purple-500 to-blue-500 text-white p-8 rounded-lg shadow-lg mb-8">
         <h2 class="text-3xl font-bold mb-2">📊 Test Statistics Dashboard</h2>
-        <p class="opacity-90 mb-6">Advanced analytics with student search by PERN No or Name</p>
+        <p class="opacity-90 mb-6">Advanced analytics with real-time student filtering</p>
         
-        <!-- Search Form (NEW - Compatible with existing view) -->
-        <form method="GET" class="flex flex-wrap gap-3">
-            <input type="text" name="search" value="{{ search_query }}" 
-                   placeholder="🔍 Search PERN No or Student Name (e.g., 12345, John)..."
-                   class="flex-1 min-w-[300px] px-4 py-3 border border-white/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 bg-white/10 backdrop-blur text-white placeholder-white/70">
-            <button type="submit" class="bg-white/20 hover:bg-white/30 px-6 py-3 rounded-lg font-semibold transition whitespace-nowrap">
-                Search
-            </button>
-            {% if search_query %}
-                <a href="{% url 'admin_stats' %}" class="bg-white/20 hover:bg-white/30 px-6 py-3 rounded-lg font-semibold transition">
-                    Clear
-                </a>
-            {% endif %}
-        </form>
+        <div class="flex flex-col md:flex-row items-stretch gap-4 bg-white/10 p-4 rounded-xl backdrop-blur-md border border-white/20">
+            
+            <div class="flex-1">
+                <label class="block text-xs font-semibold uppercase tracking-wider mb-1 opacity-80">Select Exam</label>
+                <select id="code_select" onchange="updateFilters()" 
+                    class="w-full px-4 py-3 bg-white text-gray-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-300 transition-all cursor-pointer">
+                    <option value="">-- All Exams ({{ codes|length }}) --</option>
+                    {% for code in codes %}
+                        <option value="{{ code.id }}" {% if code.id|stringformat:"s" == request.GET.code %}selected{% endif %}>
+                            {{ code.to_dict.test_name }} ({{ code.id }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <form method="GET" id="searchForm" class="flex-[2] flex flex-col sm:flex-row gap-2">
+                <input type="hidden" name="code" id="hidden_code" value="{{ request.GET.code }}">
+                
+                <div class="flex-1">
+                    <label class="block text-xs font-semibold uppercase tracking-wider mb-1 opacity-80">Search Students</label>
+                    <div class="relative">
+                        <input type="text" name="search" value="{{ search_query }}" 
+                               placeholder="PERN No or Name..."
+                               class="w-full px-4 py-3 pl-10 border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 bg-white text-gray-800 placeholder-gray-400">
+                        <span class="absolute left-3 top-3.5 opacity-40 text-gray-900">🔍</span>
+                    </div>
+                </div>
+
+                <div class="flex items-end gap-2">
+                    <button type="submit" class="bg-white text-purple-600 hover:bg-purple-50 px-6 py-3 rounded-lg font-bold transition shadow-md whitespace-nowrap h-[50px]">
+                        Search
+                    </button>
+                    {% if search_query or request.GET.code %}
+                        <a href="{% url 'admin_stats' %}" class="bg-red-400/20 hover:bg-red-400/40 text-white px-4 py-3 rounded-lg font-semibold transition h-[50px] flex items-center">
+                            Clear
+                        </a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
         
         {% if search_query %}
-            <p class="mt-4 text-sm opacity-75 bg-white/20 p-3 rounded-lg inline-block">
-                Found {{ search_results }} / {{ total_results }} results for "{{ search_query }}"
+            <p class="mt-4 text-sm bg-black/20 px-4 py-2 rounded-full inline-block">
+                Showing <strong>{{ search_results }}</strong> results for "{{ search_query }}"
             </p>
         {% endif %}
     </div>
-    
-    <!-- Code Selection (ENHANCED) -->
-    <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
-        <label class="block text-gray-700 font-semibold mb-4 text-lg">
-            Select Exam Code for Detailed View:
-        </label>
-        <select id="code_select" onchange="showStats()" 
-        class="w-full md:w-96 px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all">
-            <option value="">-- All Exams ({{ codes|length }}) --</option>
-            {% for code in codes %}
-                <option value="{{ code.id }}" {% if code.id|stringformat:"s" == request.GET.code %}selected{% endif %}>
-                    {{ code.to_dict.test_name }} ({{ code.id|upper }})  <!-- ✅ Show EXAM001 -->
-                </option>
-            {% endfor %}
-        </select>
-    </div>
-    
-    <!-- Stats Display (ENHANCED) -->
+
     <div id="stats_container">
-        {% if stats %}
-            <!-- Auto-load first exam if exists -->
-            <script>document.getElementById('code_select').onload = function(){showStats();}</script>
-        {% else %}
-            <div class="text-center py-20 text-gray-500">
-                <div class="text-4xl mb-4">📭</div>
-                <h3 class="text-2xl font-bold mb-2">No Exam Results Yet</h3>
-                <p>Upload questions and activate exam codes first</p>
-            </div>
-        {% endif %}
-    </div>
+        </div>
+</div>
     
     <!-- Back Button -->
     <div class="mt-12 text-center">
@@ -200,6 +199,26 @@ function showStats() {
     container.innerHTML = html;
 }
 
+// Function to handle dropdown changes and refresh page with URL params
+function updateFilters() {
+    var code = document.getElementById('code_select').value;
+    var search = document.querySelector('input[name="search"]').value;
+    
+    // Redirect with both parameters
+    let url = new URL(window.location.href);
+    if (code) url.searchParams.set('code', code);
+    else url.searchParams.delete('code');
+    
+    if (search) url.searchParams.set('search', search);
+    
+    window.location.href = url.toString();
+}
+
+// Sync the hidden input in the form
+document.getElementById('code_select').addEventListener('change', function() {
+    document.getElementById('hidden_code').value = this.value;
+});
+
 // NEW: Student Details Modal
 function showStudentDetails(docId) {
     fetch(`/admin/student-result-detail/${docId}/`)
@@ -308,9 +327,11 @@ function printStats() {
 // Auto-trigger on page load if code in URL
 window.onload = function() {
     const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has('code')) {
-        document.getElementById('code_select').value = urlParams.get('code');
-        showStats();
+    const codeFromUrl = urlParams.get('code');
+    
+    if (codeFromUrl) {
+        document.getElementById('code_select').value = codeFromUrl;
+        setTimeout(showStats, 100); 
     }
 };
 </script>
