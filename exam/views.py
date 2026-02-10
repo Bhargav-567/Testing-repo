@@ -505,7 +505,7 @@ def submit_exam(request):
             'timestamp': SERVER_TIMESTAMP
         }
     
-        exam_results_ref = db.collection('results').document('submissions').collection(exam_code)
+        exam_results_ref = db.collection('results').document(exam_code).collection('submissions')
         exam_results_ref.document(str(pern_no)).set(submission_data)
         
         return JsonResponse({
