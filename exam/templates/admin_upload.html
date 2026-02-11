@@ -64,6 +64,16 @@
             <p class="text-xs text-blue-600 mt-3 italic">**Note:** Use <b>semicolon (;)</b> to separate different concept keyword groups.</p>
         </div>
 
+        {% if messages %}
+            {% for message in messages %}
+                <div class="mb-4 p-4 rounded-lg {% if message.tags == 'success' %}bg-green-100 text-green-700 border border-green-200{% else %}bg-red-100 text-red-700 border border-red-200{% endif %}">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+
+
+
         <form method="POST" enctype="multipart/form-data" class="space-y-6">
             {% csrf_token %}
             
@@ -105,20 +115,40 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-function downloadSampleExcel() {
-    const data = [
-        ["Q_ID", "Question", "Type", "Options", "Teacher_Answer", "Max_Score", "Concept_Names", "Concept_Keywords"],
-        ["Q1", "Explain the Rankine cycle and the importance of the condenser in a thermal power plant.", "descriptive", "", "The Rankine cycle uses a boiler to create steam which spins a turbine. The condenser cools the steam back to water.", 10, "Rankine Cycle, Condenser", "rankine,cycle; condenser,cools,cooling"],
-        ["Q2", "Which part of the steam power plant is known as the 'heart'?", "mcq", "Boiler|Turbine|Condenser|Pump", "Boiler", 1, "", ""],
-        ["Q3", "Function of an Economizer?", "mcq", "Heat air|Heat feed water|Superheat steam|Condense steam", "Heat feed water", 1, "", ""],
-        ["Q4", "Moderator in Nuclear Reactors?", "mcq", "Boron|Graphite|Cadmium|Copper", "Graphite", 1, "", ""],
-        ["Q5", "Pelton wheel head type?", "mcq", "Low|Medium|High|All", "High", 1, "", ""]
-    ];
-    
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, "PowerPlantSample");
-    XLSX.writeFile(wb, "PowerPlant_Exam_Sample.xlsx");
-}
+    function updateFileName() {
+        const input = document.getElementById('file-upload');
+        const placeholder = document.getElementById('upload-placeholder');
+        const fileInfo = document.getElementById('file-info');
+        const nameDisplay = document.getElementById('file-name-display');
+
+        if (input.files.length > 0) {
+            placeholder.classList.add('hidden');
+            fileInfo.classList.remove('hidden');
+            nameDisplay.textContent = "Selected: " + input.files[0].name;
+        }
+    }
+
+    function resetUpload() {
+        const input = document.getElementById('file-upload');
+        input.value = ''; // Clear file
+        document.getElementById('upload-placeholder').classList.remove('hidden');
+        document.getElementById('file-info').classList.add('hidden');
+    }
+
+    function downloadSampleExcel() {
+        const data = [
+            ["Q_ID", "Question", "Type", "Options", "Teacher_Answer", "Max_Score", "Concept_Names", "Concept_Keywords"],
+            ["Q1", "Explain the Rankine cycle and the importance of the condenser in a thermal power plant.", "descriptive", "", "The Rankine cycle uses a boiler to create steam which spins a turbine. The condenser cools the steam back to water.", 10, "Rankine Cycle, Condenser", "rankine,cycle; condenser,cools,cooling"],
+            ["Q2", "Which part of the steam power plant is known as the 'heart'?", "mcq", "Boiler;Turbine;Condenser;Pump", "Boiler", 1, "", ""],
+            ["Q3", "Function of an Economizer?", "mcq", "Heat air;Heat feed water;Superheat steam;Condense steam", "Heat feed water", 1, "", ""],
+            ["Q4", "Moderator in Nuclear Reactors?", "mcq", "Boron;Graphite;Cadmium;Copper", "Graphite", 1, "", ""],
+            ["Q5", "Pelton wheel head type?", "mcq", "Low;Medium;High;All", "High", 1, "", ""]
+        ];
+        
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        XLSX.utils.book_append_sheet(wb, ws, "PowerPlantSample");
+        XLSX.writeFile(wb, "PowerPlant_Exam_Sample.xlsx");
+    }
 </script>
 {% endblock %}

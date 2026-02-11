@@ -105,9 +105,9 @@ def admin_upload(request):
     if not request.session.get('admin_logged_in'):
         return redirect('login')
     
-    # Handle the File Upload (POST)
     if request.method == 'POST':
         if 'file' not in request.FILES:
+            messages.error(request, "No file selected.")
             return render(request, 'admin_upload.html', {'error': 'No file selected'})
         
         exam_code = request.POST.get('exam_code', '').strip()
@@ -130,52 +130,72 @@ def admin_upload(request):
             })
 
             questions_data = []
-            # Inside the df.iterrows() loop in admin_upload
-            names_str = str(row.get('Concept_Names', '')).strip()
-            kws_str = str(row.get('Concept_Keywords', '')).strip()
+            
+            # Use 'idx' for the dataframe loop to avoid conflict with 'i' in concepts
+            for idx, row in df.iterrows():
+                concepts = []
+                names_str = str(row.get('Concept_Names', '')).strip()
+                kws_str = str(row.get('Concept_Keywords', '')).strip()
 
-            if names_str and names_str != 'nan':
-                names = [n.strip() for n in names_str.split(',') if n.strip()]
-                # SPLIT keywords by semicolon first, then comma
-                kw_groups = [g.strip() for g in kws_str.split(';') if g.strip()]
-                
-                for i, name in enumerate(names):
-                    # FIX: Ensure current_keywords is a list of STRINGS
-                    if i < len(kw_groups):
-                        current_keywords = [k.strip().lower() for k in kw_groups[i].split(',') if k.strip()]
-                    else:
-                        current_keywords = [name.lower()]
-                        
-                    concepts.append({
-                        'name': name,
-                        'keywords': current_keywords # This must be a flat list of strings
-                    })
+                # --- Concept Parsing Logic ---
+                if names_str and names_str.lower() != 'nan' and names_str != '':
+                    names = [n.strip() for n in names_str.split(',') if n.strip()]
+                    kw_groups = [g.strip() for g in kws_str.split(';') if g.strip()]
+                    
+                    for i, name in enumerate(names):
+                        if i < len(kw_groups):
+                            current_keywords = [k.strip().lower() for k in kw_groups[i].split(',') if k.strip()]
+                        else:
+                            current_keywords = [name.lower()]
+                            
+                        concepts.append({
+                            'name': name,
+                            'keywords': current_keywords 
+                        })
 
-                # --- Save Question ---
+                # --- Prepare Question Data (OUTSIDE the names_str IF block) ---
                 q_id = f"{exam_code}_{idx}"
+                q_type = str(row.get('Type', 'mcq')).lower().strip()
+                
+                # Handle MCQ Options: splitting by comma or pipe
+                options_raw = str(row.get('Options', ''))
+                if q_type == 'mcq':
+                    options = [o.strip() for o in options_raw.split(';') if o.strip()]
+                else:
+                    options = []
+
                 q_data = {
                     'id': q_id,
                     'exam_code': exam_code,
                     'question': str(row.get('Question', '')),
-                    'type': str(row.get('Type', 'mcq')).lower().strip(),
+                    'type': q_type,
                     'teacher_answer': str(row.get('Teacher_Answer', '')),
                     'max_score': float(row.get('Max_Score', 1.0)),
                     'concepts': concepts,
-                    'options': str(row.get('Options', '')).split('|') if str(row.get('Type')) == 'mcq' else []
+                    'options': options
                 }
+
+                # --- SAVE TO FIRESTORE ---
                 db.collection('questions').document(q_id).set(q_data)
                 questions_data.append(q_data)
+                print(f"Uploaded: {q_id}")
 
-            # SUCCESS RETURN
+            # 2. Update Global Config
+            db.collection('questions').document('config').set({
+                'questions': questions_data,
+                'total_questions': len(questions_data),
+                'updated_at': SERVER_TIMESTAMP
+            })
+
+            messages.success(request, f"✅ Successfully uploaded {len(questions_data)} questions!")
             return render(request, 'admin_upload.html', {
                 'success': f'✅ Successfully uploaded {len(questions_data)} questions for exam {exam_code}!'
             })
 
         except Exception as e:
-            # ERROR RETURN (within POST)
+            messages.error(request, f"❌ Failed upload: {str(e)}")
             return render(request, 'admin_upload.html', {'error': f"Processing Error: {str(e)}"})
 
-    # DEFAULT RETURN (For GET requests when the page first loads)
     return render(request, 'admin_upload.html')
 
 def admin_codes(request):
@@ -392,21 +412,37 @@ def enter_exam_code(request):
     return render(request, 'enter_exam_code.html')
 
 def take_exam(request):
-    # UNCHANGED
     if not request.session.get('student_logged_in') or 'exam_code' not in request.session:
         return redirect('enter_exam_code')
     
-    questions = list(db.collection('questions').stream())
-    questions_data = [{
-        'id': q.id, 'question': q.to_dict()['question'],
-        'type': q.to_dict()['type'], 'options': q.to_dict().get('options', [])
-    } for q in questions]
+    current_exam_code = request.session.get('exam_code')
+    config_ref = db.collection('questions').document('config').get()
     
+    if not config_ref.exists:
+        messages.error(request, "Exam configuration not found.")
+        return redirect('enter_exam_code')
+
+    all_questions = config_ref.to_dict().get('questions', [])
+
+    filtered_questions = [
+        {
+            'id': q.get('id'),
+            'question': q.get('question'),
+            'type': q.get('type'),
+            'options': q.get('options', [])
+        } 
+        for q in all_questions if q.get('exam_code') == current_exam_code
+    ]
+
+    if not filtered_questions:
+        messages.error(request, "No questions found for this exam code.")
+        return redirect('enter_exam_code')
+
     return render(request, 'take_exam.html', {
-        'questions': json.dumps(questions_data),
+        'questions': json.dumps(filtered_questions), # Clean JSON for JS
         'duration': request.session.get('exam_duration', 60),
         'student_name': request.session.get('student_name'),
-        'exam_code': request.session.get('exam_code')
+        'exam_code': current_exam_code
     })
 
 @csrf_exempt
@@ -521,4 +557,125 @@ def submit_exam(request):
 def student_results(request):
     if not request.session.get('student_logged_in'):
         return redirect('login')
-    return render(request, 'results.html')
+    
+    # 1. Get identifiers from the student's session
+    pern_no = request.session.get('pern_no')
+    exam_code = request.session.get('exam_code')
+    
+    if not pern_no or not exam_code:
+        return redirect('enter_exam_code')
+
+    # 2. Fetch the specific result from Firestore
+    # Path: results -> [exam_code] -> submissions -> [pern_no]
+    result_doc = db.collection('results').document(exam_code).collection('submissions').document(str(pern_no)).get()
+    
+    if not result_doc.exists:
+        return HttpResponse("Your results are not ready yet. Please contact the administrator.", status=404)
+
+    result_data = result_doc.to_dict()
+    student_details = result_data.get('details', [])
+
+    # 3. Fetch Question Config to show the question text and teacher answers
+    q_config_doc = db.collection('questions').document('config').get()
+    q_lookup = {}
+    if q_config_doc.exists:
+        q_config = q_config_doc.to_dict().get('questions', [])
+        q_lookup = {q['id']: q for q in q_config}
+
+    # 4. Merge metadata (same logic as your admin view)
+    merged_results = []
+    for detail in student_details:
+        q_id = detail.get('q_id')
+        question_info = q_lookup.get(q_id, {})
+
+        merged_results.append({
+            'q_id': q_id,
+            'question': question_info.get('question', 'Question text missing'),
+            'your_answer': detail.get('your_answer') or detail.get('student_answer'),
+            'score': detail.get('score', 0),
+            'details': {
+                'type': question_info.get('type'),
+                'max_score': question_info.get('max_score'),
+                'teacher_answer': question_info.get('teacher_answer'),
+                'options': question_info.get('options'),
+                'concept_score': detail.get('details', {}).get('concept_score', 0),
+                'semantic_similarity': detail.get('details', {}).get('semantic_similarity', 0),
+                'relation_score': detail.get('details', {}).get('relation_score', 0),
+                'penalty': detail.get('details', {}).get('penalty', 0),
+                'correct_option': question_info.get('teacher_answer'),
+                'selected': detail.get('your_answer'),
+                'correct': detail.get('details', {}).get('correct', False) # For MCQ
+            }
+        })
+
+    # 5. Pass all data to the same results.html template
+    return render(request, 'results.html', {
+        'student_name': result_data.get('student_name'),
+        'total_score': result_data.get('total_score'),
+        'total_max_score': result_data.get('total_max_score'),
+        'percentage': result_data.get('percentage'),
+        'results': merged_results,
+        'admin_view': False  # This hides the "Back to Stats" button
+    })
+
+
+def admin_result_view(request, exam_code, per_no):
+    if not request.session.get('admin_logged_in'):
+        return redirect('login')
+
+    # Path: results -> [exam_code] -> submissions -> [per_no]
+    result_doc = db.collection('results').document(exam_code).collection('submissions').document(per_no).get()
+    
+    if not result_doc.exists:
+        return HttpResponse("Result not found", status=404)
+
+    result_data = result_doc.to_dict()
+    
+    student_details = result_data.get('details', [])
+
+    # 2. Fetch the Teacher's Question Config
+    # This contains the correct answers and options
+    q_config_doc = db.collection('questions').document('config').get()
+    if not q_config_doc.exists:
+        return HttpResponse("Question configuration missing", status=404)
+    
+    q_config = q_config_doc.to_dict().get('questions', [])
+    # Create a lookup dictionary for easy mapping: { 'Q1': {question_data} }
+    q_lookup = {q['id']: q for q in q_config}
+
+    # 3. Merge the Data
+    merged_results = []
+    for detail in student_details:
+        q_id = detail.get('q_id')
+        question_info = q_lookup.get(q_id, {})
+
+        # Combine student performance with teacher metadata
+        merged_results.append({
+            'q_id': q_id,
+            'question': question_info.get('question', 'Question text missing'),
+            'your_answer': detail.get('your_answer') or detail.get('student_answer'),
+            'score': detail.get('score', 0),
+            'details': {
+                'type': question_info.get('type'),
+                'max_score': question_info.get('max_score'),
+                'teacher_answer': question_info.get('teacher_answer'),
+                'options': question_info.get('options'), # For MCQ
+                
+                'concept_score': detail.get('details', {}).get('concept_score', 0),
+                'semantic_similarity': detail.get('details', {}).get('semantic_similarity', 0),
+                'relation_score': detail.get('details', {}).get('relation_score', 0),
+                'penalty': detail.get('details', {}).get('penalty', 0),
+                'correct_option': question_info.get('teacher_answer'), # Usually same as teacher_answer for MCQs
+                'selected': detail.get('your_answer')
+            }
+        })
+
+    return render(request, 'results.html', {
+        'student_name': result_data.get('student_name'),
+        'total_score': result_data.get('total_score'),
+        'total_max_score': result_data.get('total_max_score'),
+        'percentage': result_data.get('percentage'),
+        'results': merged_results, # Now this has EVERYTHING
+        'admin_view': True,
+        'exam_code': exam_code
+    })

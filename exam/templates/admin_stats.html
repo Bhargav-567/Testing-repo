@@ -168,10 +168,10 @@ function showStats() {
                     ${result.timestamp ? new Date(result.timestamp).toLocaleDateString('en-IN') : 'N/A'}
                 </td>
                 <td class="px-6 py-4">
-                    <button onclick="showStudentDetails('${result.doc_id}')" 
-                            class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-semibold transition-all transform hover:-translate-y-0.5 shadow-md">
-                        📋 Details
-                    </button>
+                    <a href="/admin/result/${code}/${result.doc_id}/" 
+                    class="inline-block bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-semibold transition-all shadow-md">
+                        View Full Result
+                    </a>
                 </td>
             </tr>
         `;
@@ -327,11 +327,9 @@ function printStats() {
 // Auto-trigger on page load if code in URL
 window.onload = function() {
     const urlParams = new URLSearchParams(window.location.search);
-    const codeFromUrl = urlParams.get('code');
-    
-    if (codeFromUrl) {
-        document.getElementById('code_select').value = codeFromUrl;
-        setTimeout(showStats, 100); 
+    if (urlParams.has('code')) {
+        document.getElementById('code_select').value = urlParams.get('code');
+        showStats();
     }
 };
 </script>
