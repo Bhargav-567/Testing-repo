@@ -70,6 +70,9 @@ venv\Scripts\activate
 
 4. **Configure Firebase**
 
+- Db Creation -> go to firestore console > Create a Project > Project name > (optional:Analytics) Click Create project.
+- Enable Db -> Click on Firestore Database > Create Database > Test mode > Location:Asia-south1> Click Done.
+- Generate Service Key: Project settings > Service account > "Generate new Private key" json > Save .json .
 - Place your Firebase service account JSON in the project, update your `firebase_config.py` accordingly  
 - Ensure Firestore database rules allow read/write as configured for your app
 
