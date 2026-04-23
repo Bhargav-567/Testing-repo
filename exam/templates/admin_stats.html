@@ -1,0 +1,350 @@
+{% extends 'base.html' %}
+
+{% block title %}Test Statistics - Exam System{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <div class="bg-gradient-to-r from-purple-500 to-blue-500 text-white p-8 rounded-lg shadow-lg mb-8">
+        <h2 class="text-3xl font-bold mb-2">📊 Test Statistics Dashboard</h2>
+        <p class="opacity-90 mb-6">Advanced analytics with real-time student filtering</p>
+
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <div class="max-w-7xl mx-auto p-6">
+            <h1 class="text-3xl font-bold mb-8 text-white">Exam Analytics: {{ selected_code }}</h1>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+                <div class="bg-white p-6 rounded-xl shadow-md border border-gray-100">
+                    <h3 class="text-lg font-semibold mb-4 text-gray-700">Score Distribution</h3>
+                    <canvas id="distributionChart"></canvas>
+                </div>
+
+                <div class="bg-white p-6 rounded-xl shadow-md border border-gray-100">
+                    <h3 class="text-lg font-semibold mb-4 text-gray-700">Performance Trend</h3>
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <div class="flex flex-col md:flex-row items-stretch gap-4 bg-white/10 p-4 rounded-xl backdrop-blur-md border border-white/20">
+            <div class="flex-1">
+                <label class="block text-xs font-semibold uppercase tracking-wider mb-1 opacity-80">Select Exam</label>
+                <select id="code_select" onchange="updateFilters()" 
+                    class="w-full px-4 py-3 bg-white text-gray-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-300 transition-all cursor-pointer">
+                    <option value="">-- All Exams ({{ codes|length }}) --</option>
+                    {% for code in codes %}
+                        <option value="{{ code.id }}" {% if code.id|stringformat:"s" == request.GET.code %}selected{% endif %}>
+                            {{ code.to_dict.test_name }} ({{ code.id }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <form method="GET" id="searchForm" class="flex-[2] flex flex-col sm:flex-row gap-2">
+                <input type="hidden" name="code" id="hidden_code" value="{{ request.GET.code }}">
+                
+                <div class="flex-1">
+                    <label class="block text-xs font-semibold uppercase tracking-wider mb-1 opacity-80">Search Students</label>
+                    <div class="relative">
+                        <input type="text" name="search" value="{{ search_query }}" 
+                               placeholder="PERN No or Name..."
+                               class="w-full px-4 py-3 pl-10 border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 bg-white text-gray-800 placeholder-gray-400">
+                        <span class="absolute left-3 top-3.5 opacity-40 text-gray-900">🔍</span>
+                    </div>
+                </div>
+
+                <div class="flex items-end gap-2">
+                    <button type="submit" class="bg-white text-purple-600 hover:bg-purple-50 px-6 py-3 rounded-lg font-bold transition shadow-md whitespace-nowrap h-[50px]">
+                        Search
+                    </button>
+                    {% if search_query or request.GET.code %}
+                        <a href="{% url 'admin_stats' %}" class="bg-red-400/20 hover:bg-red-400/40 text-white px-4 py-3 rounded-lg font-semibold transition h-[50px] flex items-center">
+                            Clear
+                        </a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+        
+        {% if search_query %}
+            <p class="mt-4 text-sm bg-black/20 px-4 py-2 rounded-full inline-block">
+                Showing <strong>{{ search_results }}</strong> results for "{{ search_query }}"
+            </p>
+        {% endif %}
+    </div>
+
+    <div id="stats_container"></div>
+    
+    <div class="mt-12 text-center">
+        <a href="{% url 'admin_dashboard' %}" 
+           class="inline-flex items-center bg-gray-500 text-white px-8 py-3 rounded-lg font-semibold hover:bg-gray-600 transition transform hover:-translate-y-1">
+            ← Back to Dashboard
+        </a>
+    </div>
+</div>
+
+<div id="resultsModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden">
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <div id="modalContent" class="max-w-5xl max-h-[90vh] w-full overflow-y-auto bg-white rounded-2xl shadow-2xl mx-4">
+            </div>
+    </div>
+</div>
+
+<script>
+var statsData = {{ stats|safe }};
+const chartData = JSON.parse('{{ chart_json|safe }}');
+
+// 1. Distribution Chart
+new Chart(document.getElementById('distributionChart'), {
+    type: 'bar',
+    data: {
+        labels: ['Needs Improvement (<40%)', 'Proficient (40-70%)', 'Exemplary (>70%)'],
+        datasets: [{
+            label: 'Number of Students',
+            data: chartData.ranges,
+            backgroundColor: ['#ef4444', '#f59e0b', '#10b981'],
+            borderRadius: 8
+        }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } } }
+});
+
+// 2. Trend Chart
+new Chart(document.getElementById('trendChart'), {
+    type: 'line',
+    data: {
+        labels: chartData.timeline,
+        datasets: [{
+            label: 'Average Score %',
+            data: chartData.avg_scores,
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            fill: true,
+            tension: 0.4
+        }]
+    },
+    options: { 
+        responsive: true,
+        scales: { y: { beginAtZero: true, max: 100 } }
+    }
+});
+
+function showStats() {
+    var code = document.getElementById('code_select').value;
+    var container = document.getElementById('stats_container');
+    
+    if (!code || !statsData[code]) {
+        container.innerHTML = `
+            <div class="text-center py-20 text-gray-500">
+                <div class="text-4xl mb-4">📊</div>
+                <h3 class="text-2xl font-bold mb-4">Select an Exam</h3>
+                <p>Choose exam code above to view detailed statistics and student results</p>
+            </div>
+        `;
+        return;
+    }
+    
+    var data = statsData[code];
+    var html = '';
+    
+    html += `
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl p-8 shadow-xl text-center transform hover:scale-105 transition-all">
+                <div class="text-4xl font-bold mb-2">${data.total_tests}</div>
+                <div class="text-lg opacity-90">Total Students</div>
+            </div>
+            <div class="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl p-8 shadow-xl text-center transform hover:scale-105 transition-all">
+                <div class="text-4xl font-bold mb-2">${data.avg_score.toFixed(1)}%</div>
+                <div class="text-lg opacity-90">Average Score</div>
+            </div>
+            <div class="bg-gradient-to-br from-yellow-500 to-yellow-600 text-white rounded-2xl p-8 shadow-xl text-center transform hover:scale-105 transition-all">
+                <div class="text-4xl font-bold mb-2">${data.max_score.toFixed(1)}%</div>
+                <div class="text-lg opacity-90">Highest Score</div>
+            </div>
+            <div class="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-2xl p-8 shadow-xl text-center transform hover:scale-105 transition-all">
+                <div class="text-4xl font-bold mb-2">${data.min_score.toFixed(1)}%</div>
+                <div class="text-lg opacity-90">Lowest Score</div>
+            </div>
+        </div>
+    `;
+    
+    html += `
+        <div class="bg-white rounded-2xl shadow-2xl overflow-hidden mb-8 border border-gray-200">
+            <div class="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-8 py-6">
+                <h3 class="text-2xl font-bold flex items-center">
+                    📋 Individual Results (${data.total_tests} students)
+                </h3>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Student Name</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">PERN No</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Score</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Grade</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Date</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+    `;
+    
+    data.results.forEach(function(result) {
+        const perc = parseFloat(result.percentage.replace('%', ''));
+        const gradeClass = perc >= 80 ? 'bg-green-100 text-green-800' : 
+                          perc >= 70 ? 'bg-blue-100 text-blue-800' : 
+                          perc >= 60 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800';
+        const grade = perc >= 80 ? 'A' : perc >= 70 ? 'B' : perc >= 60 ? 'C' : 'F';
+        
+        html += `
+            <tr class="hover:bg-gray-50 transition-colors">
+                <td class="px-6 py-4 font-medium text-gray-900">${result.student_name}</td>
+                <td class="px-6 py-4">
+                    <span class="bg-gray-100 px-3 py-1 rounded-full text-sm font-mono">${result.pern_no || 'N/A'}</span>
+                </td>
+                <td class="px-6 py-4 font-bold text-lg text-gray-900">${result.score}</td>
+                <td class="px-6 py-4">
+                    <span class="px-4 py-2 rounded-full text-sm font-bold ${gradeClass}">
+                        ${grade}
+                    </span>
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-600">
+                    ${result.timestamp ? new Date(result.timestamp).toLocaleDateString('en-IN') : 'N/A'}
+                </td>
+                <td class="px-6 py-4 space-x-2">
+                    <button onclick="showStudentDetails('${result.doc_id}')" 
+                        class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition shadow-md">
+                        Quick View
+                    </button>
+                    <a href="/admin/result/${code}/${result.doc_id}/" 
+                       class="inline-block bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition shadow-md">
+                        Full Page
+                    </a>
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += `
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div class="flex flex-col sm:flex-row gap-4 justify-center p-8 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300">
+            <a href="/admin/download/${code}/" 
+               class="flex-1 max-w-md bg-gradient-to-r from-green-500 to-green-600 text-white text-center px-8 py-4 rounded-xl font-bold text-lg shadow-xl hover:shadow-2xl hover:scale-105 transition-all transform">
+                📥 Download Complete Results (CSV)
+            </a>
+            <button onclick="printStats()" 
+                    class="flex-1 max-w-md bg-gradient-to-r from-blue-500 to-blue-600 text-white text-center px-8 py-4 rounded-xl font-bold text-lg shadow-xl hover:shadow-2xl hover:scale-105 transition-all transform">
+                🖨️ Print Report
+            </button>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+}
+
+function updateFilters() {
+    var code = document.getElementById('code_select').value;
+    var search = document.querySelector('input[name="search"]').value;
+    let url = new URL(window.location.href);
+    if (code) url.searchParams.set('code', code);
+    else url.searchParams.delete('code');
+    if (search) url.searchParams.set('search', search);
+    window.location.href = url.toString();
+}
+
+document.getElementById('code_select').addEventListener('change', function() {
+    document.getElementById('hidden_code').value = this.value;
+});
+
+function showStudentDetails(docId) {
+    const code = document.getElementById('code_select').value;
+    // Note: Calling the Dual-ID URL to avoid 404
+    fetch(`/admin/student-result-detail/${code}/${docId}/`)
+        .then(response => response.json())
+        .then(data => {
+            const modal = document.getElementById('resultsModal');
+            const content = document.getElementById('modalContent');
+            
+            let html = `
+                <div class="sticky top-0 bg-white border-b-2 border-gray-200 p-6 flex justify-between items-center z-10 shadow-lg">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800">📋 ${data.student_name}</h2>
+                        <p class="text-gray-600">PERN: <strong>${data.pern_no || 'N/A'}</strong></p>
+                    </div>
+                    <div class="text-right flex items-center gap-4">
+                        <span class="text-3xl font-bold px-4 py-2 rounded-full bg-indigo-600 text-white">
+                            ${data.percentage}%
+                        </span>
+                        <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 text-2xl font-bold">&times;</button>
+                    </div>
+                </div>
+                <div class="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+            `;
+            
+            data.details.forEach((d, i) => {
+                const scorePerc = (d.score / (d.details?.max_score || 1)) * 100;
+                html += `
+                    <div class="question-detail bg-gray-50 rounded-xl p-6 border-l-4 ${
+                        scorePerc >= 70 ? 'border-green-500' : scorePerc >= 40 ? 'border-yellow-500' : 'border-red-500'
+                    }">
+                        <div class="flex justify-between items-start mb-4">
+                            <h3 class="font-bold text-xl text-gray-800">Question ${i+1}</h3>
+                            <div class="text-right">
+                                <div class="text-2xl font-bold">${d.score.toFixed(1)}</div>
+                                <div class="text-sm text-gray-600">out of ${d.details?.max_score || 1}</div>
+                            </div>
+                        </div>
+                        <div class="space-y-2 text-sm text-gray-700">
+                            <p><strong>Your Answer:</strong> ${d.your_answer || 'No answer'}</p>
+                            ${d.details?.type === 'Descriptive' ? `<p class="text-xs text-gray-500 italic">Descriptive grading applied.</p>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            content.innerHTML = html + `</div>`;
+            modal.classList.remove('hidden');
+        })
+        .catch(err => {
+            console.error(err);
+            alert("Could not load student details.");
+        });
+}
+
+function closeModal() {
+    document.getElementById('resultsModal').classList.add('hidden');
+}
+
+document.getElementById('resultsModal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+});
+
+function printStats() {
+    window.print();
+}
+
+window.onload = function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('code')) {
+        document.getElementById('code_select').value = urlParams.get('code');
+        showStats();
+    }
+};
+</script>
+
+<style>
+#modalContent { animation: modalSlideIn 0.3s ease-out; }
+@keyframes modalSlideIn {
+    from { opacity: 0; transform: translateY(-20px) scale(0.95); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (max-width: 768px) {
+    table { font-size: 0.875rem; }
+    th, td { padding: 0.75rem 0.5rem !important; }
+}
+</style>
+{% endblock %}

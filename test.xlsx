@@ -1,0 +1,4 @@
+"id","question","type","option1","option2","option3","option4","correct answer","correct option"
+"q1","What is AI?","descriptive","","","","","Artificial Intelligence is the simulation of human intelligence in machines",""
+"q2","Capital of France?","mcq","Paris","London","Berlin","Madrid","","Paris"
+"q3","What is Python?","descriptive","","","","","Python is a high-level programming language",""

@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto p-6 bg-white rounded shadow-lg">
+  <h2 class="text-2xl font-bold mb-4">Admin Dashboard</h2>
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <a href="{% url 'admin_upload' %}" class="block bg-blue-500 text-white font-semibold py-4 px-6 rounded hover:bg-blue-600 text-center transition">📤 Upload Questions</a>
+    <a href="{% url 'admin_codes' %}" class="block bg-green-500 text-white font-semibold py-4 px-6 rounded hover:bg-green-600 text-center transition">🔐 Manage Exam Codes</a>
+    <a href="{% url 'admin_stats' %}" class="block bg-yellow-500 text-white font-semibold py-4 px-6 rounded hover:bg-yellow-600 text-center transition">📊 View Stats</a>
+  </div>
+</div>
+{% endblock %}

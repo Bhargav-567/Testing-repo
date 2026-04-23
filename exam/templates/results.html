@@ -1,0 +1,171 @@
+{% extends 'base.html' %}
+{% block content %}
+{{ admin_view|json_script:"admin-view-data" }}
+{{ results|json_script:"results-data" }}
+{{ student_name|json_script:"student-name-data" }}
+
+<div class="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-xl">
+  
+  {% if admin_view %}
+  <div class="mb-6">
+    <a href="{% url 'admin_stats' %}?code={{ request.resolver_match.kwargs.exam_code }}" 
+       class="inline-flex items-center text-blue-600 hover:text-blue-800 font-semibold transition">
+      ← Back to View Stats
+    </a>
+  </div>
+  {% endif %}
+
+  <div class="text-center mb-8">
+    <h2 class="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
+      {% if admin_view %}📊 Student Detailed Report{% else %}📊 Your Exam Results{% endif %}
+    </h2>
+    <p class="text-gray-600 mb-4">Student: <span class="font-bold text-gray-800">{{ student_name }}</span></p>
+    
+    <div id="summary" class="bg-gradient-to-r from-green-50 to-blue-50 p-6 rounded-xl border-2 border-green-200">
+      </div>
+  </div>
+  
+  <div id="questions-breakdown" class="space-y-4"></div>
+  
+  <div class="mt-8 flex flex-col sm:flex-row gap-4 justify-center print:hidden">
+    <button onclick="printResults()" class="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition">🖨️ Print Results</button>
+    
+    {% if not admin_view %}
+      <a href="/" class="bg-gray-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-gray-700 text-center transition">🏠 Home</a>
+    {% else %}
+      <a href="{% url 'admin_dashboard' %}" class="bg-gray-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-gray-700 text-center transition">🏠 Admin Dashboard</a>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+// 4. MODIFY: Safe retrieval of Admin View status
+const isAdmin = JSON.parse(document.getElementById('admin-view-data').textContent);
+
+const resultsArray = JSON.parse(document.getElementById('results-data').textContent);
+const studentName = JSON.parse(document.getElementById('student-name-data').textContent);
+const data = {
+    student_name: studentName,
+    total_score: parseFloat("{{ total_score|default:0 }}"),
+    total_max_score: parseFloat("{{ total_max_score|default:0 }}"),
+    percentage: parseFloat("{{ percentage|default:0 }}"),
+    details: resultsArray 
+};
+
+// 3. Console log to verify it's clean
+console.log('Cleaned Data:', data);
+
+// Logic to render the UI
+if (data && data.details && data.details.length > 0) {
+  
+  // Summary Card Generation
+  document.getElementById('summary').innerHTML = `
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="text-center p-4 bg-white rounded-lg shadow">
+        <div class="text-4xl font-bold text-green-600">${data.total_score.toFixed(1)}</div>
+        <div class="text-gray-600 mt-1">Total Score</div>
+      </div>
+      <div class="text-center p-4 bg-white rounded-lg shadow">
+        <div class="text-4xl font-bold text-blue-600">${data.percentage.toFixed(1)}%</div>
+        <div class="text-gray-600 mt-1">Percentage</div>
+      </div>
+      <div class="text-center p-4 bg-white rounded-lg shadow">
+        <div class="text-4xl font-bold text-purple-600">${data.details.length}</div>
+        <div class="text-gray-600 mt-1">Questions</div>
+      </div>
+    </div>
+  `;
+  
+  let html = '';
+  data.details.forEach((d, i) => {
+    const qMax = d.details?.max_score || 1;
+    const scorePerc = (d.score / qMax) * 100;
+    const statusClass = scorePerc >= 70 ? 'bg-green-50 border-green-200' : 
+                       scorePerc >= 40 ? 'bg-yellow-50 border-yellow-200' : 'bg-red-50 border-red-200';
+    
+    html += `
+      <div class="question-result border-2 ${statusClass} rounded-xl p-6 hover:shadow-lg transition">
+        <div class="flex justify-between items-start mb-4">
+          <div class="flex-1">
+             <span class="text-xs font-bold uppercase text-gray-500">Question ${i+1}</span>
+             <h3 class="font-bold text-xl text-gray-800">${d.question || 'Exam Question'}</h3>
+          </div>
+          <div class="text-right ml-4">
+            <div class="text-2xl font-bold text-gray-800">${d.score.toFixed(1)}</div>
+            <div class="text-sm text-gray-500">out of ${qMax}</div>
+          </div>
+        </div>
+        
+        ${d.details?.type === 'descriptive' || d.details?.type === 'Descriptive' ? `
+          <details class="descriptive-details">
+            <summary class="cursor-pointer font-semibold mb-3 p-2 bg-white/50 rounded border border-gray-200 shadow-sm">📊 Score Breakdown Metrics</summary>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3 text-sm">
+              <div class="p-3 bg-white rounded shadow-sm border border-blue-100">
+                <div class="font-bold text-blue-700">${(d.details.concept_score * 100).toFixed(0)}%</div>
+                <div class="text-xs text-gray-600">Keywords</div>
+              </div>
+              <div class="p-3 bg-white rounded shadow-sm border border-purple-100">
+                <div class="font-bold text-purple-700">${(d.details.semantic_similarity * 100).toFixed(0)}%</div>
+                <div class="text-xs text-gray-600">Meaning</div>
+              </div>
+              <div class="p-3 bg-white rounded shadow-sm border border-green-100">
+                <div class="font-bold text-green-700">${(d.details.relation_score * 100).toFixed(0)}%</div>
+                <div class="text-xs text-gray-600">Structure</div>
+              </div>
+              <div class="p-3 bg-white rounded shadow-sm border border-red-100">
+                <div class="font-bold text-red-700">-${(d.details.penalty * 100).toFixed(0)}%</div>
+                <div class="text-xs text-gray-600">Penalty</div>
+              </div>
+            </div>
+            <div class="mt-4 pt-4 border-t border-gray-200 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p class="text-xs font-bold text-gray-500 uppercase mb-1">👨‍🏫 Reference Answer:</p>
+                <p class="bg-gray-100 p-3 rounded text-sm text-gray-700 italic border border-gray-200">${d.details.teacher_answer || 'N/A'}</p>
+              </div>
+              <div>
+                <p class="text-xs font-bold text-gray-500 uppercase mb-1">📝 Student Submission:</p>
+                <p class="bg-blue-50 p-3 rounded text-sm text-gray-800 border border-blue-100">${d.your_answer || 'No answer submitted'}</p>
+              </div>
+            </div>
+          </details>
+        ` : `
+          <div class="mcq-result p-4 bg-white/50 rounded-lg border border-gray-200">
+            <div class="flex items-center gap-2 mb-2">
+                <span class="px-2 py-1 rounded text-xs font-bold bg-gray-200">MCQ</span>
+                <span class="font-bold ${d.details.correct ? 'text-green-600' : 'text-red-600'}">
+                    ${d.details.correct ? '✅ Correct' : '❌ Incorrect'}
+                </span>
+            </div>
+            <p class="text-sm"><strong>Selected Option:</strong> ${d.details.selected || '<span class="text-red-400">None</span>'}</p>
+            <p class="text-sm text-green-700"><strong>Correct Option:</strong> ${d.details.correct_option}</p>
+          </div>
+        `}
+      </div>
+    `;
+  });
+  
+  document.getElementById('questions-breakdown').innerHTML = html;
+}
+</script>
+
+<style>
+details summary { list-style: none; }
+details summary::-webkit-details-marker { display: none; }
+details summary::before { 
+    content: '▶'; 
+    display: inline-block; 
+    margin-right: 0.5rem; 
+    font-size: 0.8rem; 
+    transition: transform 0.2s;
+}
+details[open] summary::before { transform: rotate(90deg); }
+
+@media print {
+    .print\:hidden { display: none; }
+}
+</style>
+
+<script>
+function printResults() { window.print(); }
+</script>
+{% endblock %}
