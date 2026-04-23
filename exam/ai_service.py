@@ -1,3 +1,4 @@
+#ai_service.py
 from dataclasses import dataclass
 from typing import List, Dict, Tuple, Set, Optional
 import re
@@ -5,6 +6,7 @@ import spacy
 from sentence_transformers import SentenceTransformer, util
 import numpy as np
 import math
+from collections import Counter
 
 # ==============================
 # DATA STRUCTURES (MINIMAL)
@@ -23,7 +25,7 @@ class QuestionConfig:
     correct_option: str = ""  # MCQ only  
     correct_answer: str = ""  # Fallback
     concepts: List[Concept] = None
-    max_score: float = 1.0
+    max_score: int = 1
     
 # ==============================
 # NEW AI-SERVICE DESCRIPTIVE GRADER
@@ -103,25 +105,34 @@ class DescriptiveAnswerGrader:
     def compute_penalty(self, cfg: QuestionConfig, student_answer: str) -> float:
         text = self._normalize(student_answer)
         doc = self.nlp(text)
-        # Keyword stuffing
+
+        from collections import Counter
+        lemmas = [t.lemma_.lower() for t in doc if t.is_alpha]
+        word_freq = Counter(lemmas)
+
         concept_kws = [kw.lower() for c in (cfg.concepts or []) for kw in c.keywords]
-        word_freq = {t.lemma_.lower(): doc.count_by("LEMMA", t.lemma_) for t in doc if t.is_alpha}
+
         rep_hits = sum(1 for kw in concept_kws if word_freq.get(kw, 0) > 3)
-        # Noun/verb ratio
+
         noun_cnt = sum(1 for t in doc if t.pos_ in ("NOUN", "PROPN"))
         verb_cnt = sum(1 for t in doc if t.pos_ == "VERB")
+
         ratio_pen = 0.5 if verb_cnt == 0 and noun_cnt > 0 else 0.3 if noun_cnt / max(1, verb_cnt) > 5 else 0.0
-        # Length rambling
+
         t_len = len(self._normalize(cfg.teacher_answer).split())
         s_len = len(text.split())
+
         len_pen = 0.4 if t_len > 0 and s_len > 3 * t_len else 0.0
+
         raw_pen = min(0.5, 0.2 * rep_hits) + ratio_pen + len_pen
+
         return max(0.0, min(1.0, raw_pen))
 
-    def evaluate_answer(student_answer, correct_answer, concepts=None, max_score=10.0):
+    def evaluate_answer(student_answer, correct_answer, concepts=None, max_score=10):
         """NEW: Hybrid wrapper for backward compatibility"""
         grader = DescriptiveAnswerGrader()
-        cfg = QuestionConfig("Q1", correct_answer, concepts or [], max_score)
+        
+        cfg = QuestionConfig("Q1",type="descriptive", teacher_answer = correct_answer, concepts =  concepts or [], max_score=int(float(max_score or 0)))
         result = grader.grade(cfg, student_answer)
         similarity = result["normalized"]  # 0-1.0
         ai_score = (similarity * 100)  # Percentage
@@ -140,7 +151,7 @@ class DescriptiveAnswerGrader:
                    self.w_semantic * s_score - 
                    self.w_penalty * penalty)
         combined = max(0.0, min(1.0, combined))
-        final_score = combined * cfg.max_score
+        final_score = combined * int(cfg.max_score)
         
         return {
             "final_score": final_score,

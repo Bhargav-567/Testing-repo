@@ -161,9 +161,17 @@ def admin_upload(request):
                 # Handle MCQ Options: splitting by comma or pipe
                 options_raw = str(row.get('Options', ''))
                 if q_type == 'mcq':
-                    options = [o.strip() for o in options_raw.split(';') if o.strip()]
+                    options = [
+                        str(row.get('option1', '')).strip(),
+                        str(row.get('option2', '')).strip(),
+                        str(row.get('option3', '')).strip(),
+                        str(row.get('option4', '')).strip(),
+                    ]
+
+                    # Remove empty values
+                    options = [opt for opt in options if opt]
                 else:
-                    options = []
+                    options = []    
 
                 q_data = {
                     'id': q_id,
@@ -198,6 +206,114 @@ def admin_upload(request):
             return render(request, 'admin_upload.html', {'error': f"Processing Error: {str(e)}"})
 
     return render(request, 'admin_upload.html')
+
+#=====================================
+# Download Exam dataframe 
+#=====================================
+
+import pandas as pd
+
+def generate_exam_dataframe():
+    """Returns the sample exam DataFrame"""
+    return pd.DataFrame({
+        'Q_ID': ['Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6'],
+
+        'Question': [
+            'What is function of boiler drum?',
+            'Explain steam turbine function',
+            'What is economiser purpose?',
+            'Superheater function?',
+            'Turbine converts energy:',
+            'Boiler drum separates:'
+        ],
+
+        'Type': ['mcq', 'descriptive', 'descriptive', 'descriptive', 'mcq', 'mcq'],
+
+        'option1': [
+            'Steam generator', '', '', '',
+            'Thermal→thermal', 'Steam from air'
+        ],
+        'option2': [
+            'Water separator', '', '', '',
+            'Thermal→mechanical', 'Steam from water'
+        ],
+        'option3': [
+            'Heat exchanger', '', '', '',
+            'Mechanical→electrical', 'Water from steam'
+        ],
+        'option4': [
+            'Power source', '', '', '',
+            'Chemical→electrical', 'Air from water'
+        ],
+
+        'Teacher_Answer': [
+            'B',
+            'Steam turbine drives generator to produce electricity',
+            'Economiser preheats feedwater using flue gas heat',
+            'Superheater raises steam temperature above saturation',
+            'C',
+            'B'
+        ],
+
+        'Max_Score': [1, 10, 8, 10, 1, 1],
+
+        'Concept_Names': [
+            'boiler_drum',
+            'steam_turbine,generator',
+            'economiser,feedwater',
+            'superheater,saturation',
+            'turbine,energy_conversion',
+            'drum,steam_separation'
+        ],
+
+        'Concept_Keywords': [
+            'drum,boiler,separate,steam,water',
+            'steam,turbine,blades,rotate;generator,shaft,electricity,power',
+            'economiser,preheat,flue,gas;feedwater,boiler,inlet,temperature',
+            'superheater,steam,heat,furnace;saturation,dry,enthalpy,efficiency',
+            'turbine,convert,mechanical,electrical;energy,thermal,mechanical',
+            'drum,separate,cylinder,boiler;steam,saturated,vapor,water'
+        ]
+    })
+
+from django.http import HttpResponse
+from openpyxl.utils import get_column_letter
+
+def download_sample_excel(request):
+    df = generate_exam_dataframe()
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = (
+        'attachment; filename="Exam_Questions_Complete_Sample.xlsx"'
+    )
+
+    with pd.ExcelWriter(response, engine='openpyxl') as writer:
+        df.to_excel(writer, sheet_name='Descriptive_Master', index=False)
+        ws = writer.sheets['Descriptive_Master']
+
+        # Auto-size columns (robust + readable)
+        for idx, column in enumerate(ws.columns, 1):
+            max_len = max(
+                len(str(cell.value)) if cell.value else 0
+                for cell in column
+            )
+            ws.column_dimensions[get_column_letter(idx)].width = min(max_len + 2, 60)
+
+    return response
+
+def download_sample_csv(request):
+    df = generate_exam_dataframe()
+
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = (
+        'attachment; filename="Exam_Questions_Complete_Sample.csv"'
+    )
+
+    df.to_csv(response, index=False)
+    return response
+
 
 def admin_codes(request):
     # UNCHANGED
@@ -366,6 +482,15 @@ def download_results(request, exam_code):
 
     # Create DataFrame
     df = pd.DataFrame(data)
+
+    # Fix Firestore timestamps (force convert + remove timezone)
+    for col in df.columns:
+        try:
+            df[col] = pd.to_datetime(df[col], errors='ignore')
+            if hasattr(df[col].dtype, 'tz'):
+                df[col] = df[col].dt.tz_localize(None)
+        except:
+            pass
     
     # Clean up column names for the Excel file
     column_mapping = {
@@ -376,9 +501,12 @@ def download_results(request, exam_code):
     }
     df = df.rename(columns=column_mapping)
 
+    for col in df.columns:
+        if pd.api.types.is_datetime64_any_dtype(df[col]):
+            df[col] = df[col].dt.tz_localize(None)
     # Use BytesIO to create the Excel file in memory
     output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Results')
     
     response = HttpResponse(
@@ -514,8 +642,15 @@ def submit_exam(request):
             print(f"{q_id} Question score processing")                                                   # Debug Helper
             if q_type == 'mcq':
                 selected = user_ans.get('selectedOption', '')
-                teacher_answer = q['teacher_answer']
-                is_correct = selected == teacher_answer
+                correct_letter = q['teacher_answer']
+
+                options = q.get('options', [])
+
+                correct_index = ord(correct_letter.upper()) - ord('A')
+                correct_option = options[correct_index] if correct_index < len(options) else ''
+
+                is_correct = selected == correct_option
+
                 q_score = q['max_score'] if is_correct else 0.0
                 score += q_score
                 details = {'type': 'MCQ', 'correct': is_correct, 'max_score': q['max_score']}
@@ -533,11 +668,12 @@ def submit_exam(request):
                         question_id = q_id,
                         type =  q_type,
                         teacher_answer = q['teacher_answer'],
-                        correct_answer = answers[q_id],
+                        # correct_answer = answers[q_id],
                         concepts = concepts,
-                        max_score = float(q['max_score']),
+                        max_score = int(float(q.get('max_score', 1))),
                     )
-                    print(f"Question config of {q_id} is : {cfg}")                                      # Debug Helper
+                    print(f"Question config of {q_id} is : {cfg}")         
+                    print(type(cfg.max_score), cfg.max_score)                             # Debug Helper
                     result = grader.grade(cfg, student_ans)
                     print(f"Result score for it :: {result}")                                            # Debug Helper
                     q_score = result['final_score']
